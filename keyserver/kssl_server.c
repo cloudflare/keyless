@@ -772,7 +772,7 @@ int main(int argc, char *argv[])
   ev_signal_start(loop, &signal_watcher);
 
   pid_t pid[MAX_PROCESSES];
-  for (i = 0; i < num_processes + 1; i++) {
+  for (i = 0; i < num_processes; i++) {
     pid[i] = fork();
     if(pid[i] == 0) {
 

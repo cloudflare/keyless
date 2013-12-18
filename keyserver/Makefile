@@ -40,7 +40,7 @@ kill:
 	@rm -f $(PID_FILE)
 else
 run: all
-	@$(VALGRIND_COMMAND)$(OBJ)keyserver --port=$(PORT) --server-cert=server-cert/cert.pem --server-key=server-cert/key.pem --private-key-directory=keys --cipher-list=ECDHE-RSA-AES128-SHA256:AES128-GCM-SHA256:RC4:HIGH:!MD5:!aNULL:!EDH --ca-file=$(CA_FILE) --pid-file=$(PID_FILE) --silent --num-processes=4 &
+	@$(VALGRIND_COMMAND)$(OBJ)kssl_server --port=$(PORT) --server-cert=server-cert/cert.pem --server-key=server-cert/key.pem --private-key-directory=keys --cipher-list=ECDHE-RSA-AES128-SHA256:AES128-GCM-SHA256:RC4:HIGH:!MD5:!aNULL:!EDH --ca-file=$(CA_FILE) --pid-file=$(PID_FILE) --silent --num-processes=4 &
 ifeq ($(VALGRIND),1)
 	@echo $$! > $(PID_FILE)
 endif
@@ -56,7 +56,7 @@ endif
 test: all
 	@$(MAKE) --no-print-directory kill
 	@$(MAKE) --no-print-directory run VALGRIND=$(VALGRIND)
-	@$(OBJ)testclient --port=$(PORT) --private-key=keys/private.key --client-cert=client-cert/cert.pem --client-key=client-cert/key.pem --ca-file=$(CA_FILE) $(DEBUG)
+	@$(OBJ)kssl_testclient --port=$(PORT) --private-key=keys/private.key --client-cert=client-cert/cert.pem --client-key=client-cert/key.pem --ca-file=$(CA_FILE) $(DEBUG)
 ifeq ($(VALGRIND),1)
 	@$(MAKE) --no-print-directory kill
 	@echo valgrind log in $(VALGRIND_LOG)
