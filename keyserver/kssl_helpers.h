@@ -28,34 +28,34 @@ typedef struct kssl_operation_ {
 void zero_operation(kssl_operation *request);
 
 // Parse a raw message to extract kssl_operation information
-int parse_message_payload(BYTE *payload, int len, kssl_operation *request);
+kssl_error_code parse_message_payload(BYTE *payload, int len, kssl_operation *request);
 
 // Populate a kssl_header structure from a byte stream
-int parse_header(BYTE *bytes, kssl_header *header);
+kssl_error_code parse_header(BYTE *bytes, kssl_header *header);
 
 // Extract the data from a payload item from a given offset.
 // the offset is updated as bytes are written.  If offset pointer is
 // NULL this function starts at offset 0.
-int parse_item(BYTE *bytes, int *offset, kssl_item *item);
+kssl_error_code parse_item(BYTE *bytes, int *offset, kssl_item *item);
 
 // Serialize a header into a pre-allocated byte array at a given
 // offset. The offset is updated as bytes are written.  If offset
 // pointer is NULL this function starts at offset 0.
-int flatten_header(kssl_header *header, BYTE *bytes, int *offset);
+kssl_error_code flatten_header(kssl_header *header, BYTE *bytes, int *offset);
 
 // Serialize a KSSL item with a given tag and one byte payload at an
 // offset. The offset is updated as bytes are written.  If offset
 // pointer is NULL this function starts at offset 0.
-int flatten_item_byte(BYTE tag, BYTE payload, BYTE *bytes, int *offset);
+kssl_error_code flatten_item_byte(BYTE tag, BYTE payload, BYTE *bytes, int *offset);
 
 // Serialize a KSSL item with a given tag and a payload at an offset.
 // The offset is updated as bytes are written.  If offset pointer is NULL
 // this function starts at offset 0.
-int flatten_item(BYTE tag, BYTE *payload, WORD payload_len, BYTE *bytes,
+kssl_error_code flatten_item(BYTE tag, BYTE *payload, WORD payload_len, BYTE *bytes,
     int *offset);
 
 // Serialize a KSSL request
-int flatten_operation(kssl_header *header, kssl_operation *request,
+kssl_error_code flatten_operation(kssl_header *header, kssl_operation *request,
     BYTE **request_out, int *length);
 
 // Log a summary of the operation

@@ -35,7 +35,7 @@ typedef struct {
 // Possible item tags
 
 #define KSSL_TAG_DIGEST     0x01 // An RSA key digest (see
-                                 // digest_pubilc_modulus)
+                                 // digest_public_modulus)
 #define KSSL_TAG_SNI        0x02 // Server name (optional)
 #define KSSL_TAG_CLIENT_IP  0x03 // Client IP (4 bytes for IPv4, 16 for IPv6)
 #define KSSL_TAG_OPCODE     0x11 // Requested operation (one of KSSL_OP_*)
@@ -72,14 +72,17 @@ typedef struct {
 #define KSSL_OP_ERROR                0xFF
 
 // Some error occurred, explanation is single byte in payload
-#define KSSL_ERROR_NONE              0x00
-#define KSSL_ERROR_CRYPTO_FAILED     0x01
-#define KSSL_ERROR_KEY_NOT_FOUND     0x02
-#define KSSL_ERROR_READ              0x03
-#define KSSL_ERROR_VERSION_MISMATCH  0x04
-#define KSSL_ERROR_BAD_OPCODE        0x05
-#define KSSL_ERROR_UNEXPECTED_OPCODE 0x06
-#define KSSL_ERROR_FORMAT            0x07
-#define KSSL_ERROR_INTERNAL          0x08
+
+typedef enum {
+  KSSL_ERROR_NONE              = 0x00,
+  KSSL_ERROR_CRYPTO_FAILED     = 0x01,
+  KSSL_ERROR_KEY_NOT_FOUND     = 0x02,
+  KSSL_ERROR_READ              = 0x03,
+  KSSL_ERROR_VERSION_MISMATCH  = 0x04,
+  KSSL_ERROR_BAD_OPCODE        = 0x05,
+  KSSL_ERROR_UNEXPECTED_OPCODE = 0x06,
+  KSSL_ERROR_FORMAT            = 0x07,
+  KSSL_ERROR_INTERNAL          = 0x08
+} kssl_error_code;
 
 #endif // INCLUDED_KSSL

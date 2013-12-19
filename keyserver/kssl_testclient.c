@@ -41,7 +41,7 @@ void fatal_error(const char *fmt, ...)
   va_start(l, fmt);
   vfprintf(stderr, fmt, l);
   va_end(l);
-  printf("\n");
+  fprintf(stderr, "\n");
 
   exit(1);
 }
@@ -519,7 +519,7 @@ void kssl_op_rsa_sign(connection *c, RSA *private, int opcode)
       "1234567890123456789012345678",                                      // SHA224 is 28 bytes
       "12345678901234567890123456789012",                                  // SHA256 is 32 bytes
       "123456789012345678901234567890123456789012345678",                  // SHA384 is 48 bytes
-      "1234567890123456789012345678901212345678901234567890123456789012"}; // SHA512 is 64 bytes
+      "1234567890123456789012345678901234567890123456789012345678901234"}; // SHA512 is 64 bytes
 
   int i;
   for (i = 0; i < ALGS_COUNT; i++) {

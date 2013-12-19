@@ -16,15 +16,14 @@ extern int silent;
 
 // Public functions
 
-// Create a serialized response from a KSSL request header and payload
-// see core.h
-int kssl_operate(
-    kssl_header *header,
-    BYTE *payload,
-    pk_list privates,
-    BYTE **out_response,
-    int *out_response_len) {
-  int err = KSSL_ERROR_NONE;
+// kssl_operate: create a serialized response from a KSSL request
+// header and payload
+kssl_error_code kssl_operate(kssl_header *header,
+							 BYTE *payload,
+							 pk_list privates,
+							 BYTE **out_response,
+							 int *out_response_len) {
+  kssl_error_code err = KSSL_ERROR_NONE;
   BYTE *local_resp = NULL;
   int local_resp_len = 0;
 
@@ -105,7 +104,7 @@ int kssl_operate(
       err = private_key_operation(privates, key_id, request.opcode,
           request.payload_len, request.payload, out_payload,
           &payload_size);
-      if (err < 0) {
+      if (err != KSSL_ERROR_NONE) {
         err = KSSL_ERROR_CRYPTO_FAILED;
         break;
       }
@@ -151,11 +150,10 @@ exit:
 }
 
 // see core.h
-int kssl_error(
-    DWORD id,
-    BYTE error,
-    BYTE **response,
-    int *response_len) {
+kssl_error_code kssl_error(DWORD id,
+						   BYTE error,
+						   BYTE **response,
+						   int *response_len) {
   kssl_header e;
   int offset = 0;
   int size = KSSL_HEADER_SIZE + KSSL_OPCODE_ITEM_SIZE + KSSL_ERROR_ITEM_SIZE;
@@ -183,6 +181,7 @@ int kssl_error(
   *response_len = size;
 
   return KSSL_ERROR_NONE;
-};
+}
+
 
 

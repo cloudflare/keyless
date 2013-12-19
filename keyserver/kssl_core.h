@@ -5,9 +5,11 @@
 #ifndef INCLUDED_KSSL_CORE
 #define INCLUDED_KSSL_CORE 1
 
+#include "kssl.h"
+
 // Allocate and populate a response to a keyless SSL request
 // using an opaque list of private keys response to be freed by caller
-int kssl_operate(
+kssl_error_code kssl_operate(
     kssl_header *header,
     BYTE *payload,
     pk_list privates,
@@ -16,7 +18,7 @@ int kssl_operate(
 
 // Create a keyless SSL response message corresponding to an error
 // response to be freed by caller
-int kssl_error(
+kssl_error_code kssl_error(
     DWORD id,
     BYTE error,
     BYTE **response,
