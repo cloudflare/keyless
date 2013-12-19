@@ -79,6 +79,7 @@ kssl_error_code kssl_operate(kssl_header *header,
     {
       unsigned int payload_size;
       int max_payload_size;
+	  int key_id;
 
       if (request.is_digest_set == 0) {
         err = KSSL_ERROR_FORMAT;
@@ -86,7 +87,7 @@ kssl_error_code kssl_operate(kssl_header *header,
       }
 
       // Identify private key from request digest
-      int key_id = find_private_key(privates, request.digest);
+      key_id = find_private_key(privates, request.digest);
       if (key_id < 0) {
         err = KSSL_ERROR_KEY_NOT_FOUND;
         break;
@@ -182,6 +183,3 @@ kssl_error_code kssl_error(DWORD id,
 
   return KSSL_ERROR_NONE;
 }
-
-
-

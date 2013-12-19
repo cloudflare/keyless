@@ -3,25 +3,28 @@
 //
 // Copyright (c) 2013 CloudFlare, Inc.
 
-#include <unistd.h>
-#include <sys/socket.h>
-#include <netinet/ip.h>
-
 #include <openssl/ssl.h>
 #include <openssl/err.h>
 #include <openssl/conf.h>
 #include <openssl/engine.h>
 
 #include <stdarg.h>
-#include <getopt.h>
-
-#include <fcntl.h>
-#include <glob.h>
-
-#include <ev.h>
 
 #include "kssl.h"
 #include "kssl_helpers.h"
+
+#if PLATFORM_WINDOWS
+#include <winsock2.h>
+#else
+#include <unistd.h>
+#include <sys/socket.h>
+#include <netinet/ip.h>
+#include <glob.h>
+#include <getopt.h>
+#include <ev.h>
+#endif
+#include <fcntl.h>
+
 #include "kssl_log.h"
 
 #include "kssl_private_key.h"

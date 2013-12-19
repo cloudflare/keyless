@@ -1,26 +1,29 @@
-// testclient.c: test program to communicate with a keyserver
+// kssl_testclient.c: test program to communicate with a keyserver
 //
 // Copyright (c) 2013 CloudFlare, Inc.
 
 #include <ctype.h>
-#include <unistd.h>
-#include <netdb.h>
-#include <sys/socket.h>
-#include <netinet/ip.h>
-#include <pthread.h>
 
 #include <openssl/evp.h>
 #include <openssl/ssl.h>
 #include <openssl/err.h>
 
 #include <sys/types.h>
-#include <sys/wait.h>
-
 #include <stdarg.h>
-#include <getopt.h>
 
 #include "kssl.h"
 #include "kssl_helpers.h"
+
+#if PLATFORM_WINDOWS
+#include <winsock2.h>
+#else
+#include <netdb.h>
+#include <sys/socket.h>
+#include <netinet/ip.h>
+#include <pthread.h>
+#include <sys/wait.h>
+#include <getopt.h>
+#endif
 
 unsigned char ipv6[16] = {0x0, 0xf2, 0x13, 0x48, 0x43, 0x01};
 unsigned char ipv4[4] = {127, 0, 0, 1};
@@ -54,10 +57,12 @@ void digest_public_modulus(RSA *key, BYTE *digest)
 {
   // QUESTION: can we use a single EVP_MD_CTX for multiple
   // digests?
+  char *hex;
+  EVP_MD_CTX *ctx;
 
-  EVP_MD_CTX *ctx = EVP_MD_CTX_create();
+  ctx = EVP_MD_CTX_create();
   EVP_DigestInit_ex(ctx, EVP_sha256(), 0);
-  char *hex = BN_bn2hex(key->n);
+  hex = BN_bn2hex(key->n);
   EVP_DigestUpdate(ctx, hex, strlen(hex));
   EVP_DigestFinal_ex(ctx, digest, 0);
   EVP_MD_CTX_destroy(ctx);
@@ -139,8 +144,8 @@ static void dump_request(kssl_operation *request) {
   printf("OPCODE: %s ", opstring(op));
 
   if (op == KSSL_OP_RSA_DECRYPT) {
-    printf("  Digest: ");
     int i;
+    printf("  Digest: ");
     for (i = 0; i < KSSL_DIGEST_SIZE; ++i) {
       printf("%02x", request->digest[i]);
     }
@@ -234,20 +239,22 @@ kssl_header *kssl(SSL *ssl, kssl_header *k, kssl_operation *r)
   BYTE buf[KSSL_HEADER_SIZE];
   BYTE *req;
   int req_len;
+  unsigned int n;
+  kssl_header h;
+  kssl_header *to_return;
 
   flatten_operation(k, r, &req, &req_len);
 
   dump_header(k, "send");
   dump_request(r);
 
-  uint n = SSL_write(ssl, req, req_len);
-  if (n != (uint)req_len) {
+  n = SSL_write(ssl, req, req_len);
+  if (n != (unsigned int)req_len) {
     fatal_error("Failed to send KSSL header");
   }
 
   free(req);
 
-  kssl_header h;
   n = SSL_read(ssl, buf, KSSL_HEADER_SIZE);
   if (n != KSSL_HEADER_SIZE) {
     fatal_error("Error receiving KSSL header, size: %d", n);
@@ -263,7 +270,7 @@ kssl_header *kssl(SSL *ssl, kssl_header *k, kssl_operation *r)
 
   dump_header(&h, "recv");
 
-  kssl_header *to_return = (kssl_header *)malloc(sizeof(kssl_header));
+  to_return = (kssl_header *)malloc(sizeof(kssl_header));
   memcpy(to_return, &h, sizeof(kssl_header));
 
   if (h.length > 0) {
@@ -287,9 +294,11 @@ typedef struct {
 
 void kssl_bad_opcode(connection *c)
 {
-  test("Bad KSSL opcode (%d)", c->fd);
   kssl_header bad;
   kssl_operation req, resp;
+  kssl_header *h;
+
+  test("Bad KSSL opcode (%d)", c->fd);
   bad.version_maj = KSSL_VERSION_MAJ;
   bad.version_min = KSSL_VERSION_MIN;
   bad.id = 0x12345678;
@@ -299,7 +308,7 @@ void kssl_bad_opcode(connection *c)
   req.is_payload_set = 1;
   req.opcode = 0xBB;
   req.payload_len = 0;
-  kssl_header *h = kssl(c->ssl, &bad, &req);
+  h = kssl(c->ssl, &bad, &req);
   test_assert(h->id == bad.id);
   test_assert(h->version_maj == KSSL_VERSION_MAJ);
   parse_message_payload(h->data, h->length, &resp);
@@ -311,9 +320,11 @@ void kssl_bad_opcode(connection *c)
 
 void kssl_op_pong(connection *c)
 {
-  test("KSSL_OP_PONG (%d)", c->fd);
   kssl_header echo0;
   kssl_operation req, resp;
+  kssl_header *h;
+  test("KSSL_OP_PONG (%d)", c->fd);
+
   echo0.version_maj = KSSL_VERSION_MAJ;
   echo0.version_min = KSSL_VERSION_MIN;
   echo0.id = 0x12345678;
@@ -322,7 +333,7 @@ void kssl_op_pong(connection *c)
   req.is_payload_set = 1;
   req.opcode = KSSL_OP_PONG;
   req.payload_len = 0;
-  kssl_header *h = kssl(c->ssl, &echo0, &req);
+  h = kssl(c->ssl, &echo0, &req);
   test_assert(h->id == echo0.id);
   test_assert(h->version_maj == KSSL_VERSION_MAJ);
   parse_message_payload(h->data, h->length, &resp);
@@ -334,9 +345,11 @@ void kssl_op_pong(connection *c)
 
 void kssl_op_error(connection *c)
 {
-  test("KSSL_OP_ERROR (%d)", c->fd);
   kssl_header echo0;
   kssl_operation req, resp;
+  kssl_header *h;
+  test("KSSL_OP_ERROR (%d)", c->fd);
+
   echo0.version_maj = KSSL_VERSION_MAJ;
   echo0.id = 0x12345678;
   zero_operation(&req);
@@ -344,7 +357,7 @@ void kssl_op_error(connection *c)
   req.is_payload_set = 1;
   req.opcode = KSSL_OP_ERROR;
   req.payload_len = 0;
-  kssl_header *h = kssl(c->ssl, &echo0, &req);
+  h = kssl(c->ssl, &echo0, &req);
   test_assert(h->id == echo0.id);
   test_assert(h->version_maj == KSSL_VERSION_MAJ);
   parse_message_payload(h->data, h->length, &resp);
@@ -356,9 +369,11 @@ void kssl_op_error(connection *c)
 
 void kssl_op_ping_no_payload(connection *c)
 {
-  test("KSSL_OP_PING with no payload (%d)", c->fd);
   kssl_header echo0;
   kssl_operation req, resp;
+  kssl_header *h;
+  test("KSSL_OP_PING with no payload (%d)", c->fd);
+
   echo0.version_maj = KSSL_VERSION_MAJ;
   echo0.id = 0x12345678;
   zero_operation(&req);
@@ -366,7 +381,7 @@ void kssl_op_ping_no_payload(connection *c)
   req.is_payload_set = 1;
   req.opcode = KSSL_OP_PING;
   req.payload_len = 0;
-  kssl_header *h = kssl(c->ssl, &echo0, &req);
+  h = kssl(c->ssl, &echo0, &req);
   test_assert(h->id == echo0.id);
   test_assert(h->version_maj == KSSL_VERSION_MAJ);
   parse_message_payload(h->data, h->length, &resp);
@@ -377,11 +392,14 @@ void kssl_op_ping_no_payload(connection *c)
 
 void kssl_op_ping_payload(connection *c)
 {
-  test("KSSL_OP_PING with payload (%d)", c->fd);
   const char *hello = "Hello, World!";
   kssl_operation req, resp;
   kssl_header echo1;
-  BYTE *payload = malloc(strlen(hello) + 1);
+  kssl_header *h;
+  BYTE *payload;
+  test("KSSL_OP_PING with payload (%d)", c->fd);
+
+  payload = malloc(strlen(hello) + 1);
   echo1.version_maj = KSSL_VERSION_MAJ;
   echo1.id = 0x12345679;
   zero_operation(&req);
@@ -391,7 +409,7 @@ void kssl_op_ping_payload(connection *c)
   req.payload_len = strlen(hello);
   req.payload = payload;
   memcpy((char *)payload, hello, strlen(hello));
-  kssl_header *h = kssl(c->ssl, &echo1, &req);
+  h = kssl(c->ssl, &echo1, &req);
   test_assert(h->id == echo1.id);
   test_assert(h->version_maj == KSSL_VERSION_MAJ);
   parse_message_payload(h->data, h->length, &resp);
@@ -404,11 +422,13 @@ void kssl_op_ping_payload(connection *c)
 
 void kssl_repeat_op_ping(connection *c, int repeat)
 {
-  test("Repeat KSSL_OP_PING %d times (%d)", repeat, c->fd);
   char hello[255];
   kssl_header echo1;
   kssl_operation req, resp;
+  kssl_header *h;
+  int i;
   BYTE *payload = malloc(255 + 1);
+  test("Repeat KSSL_OP_PING %d times (%d)", repeat, c->fd);
   echo1.version_maj = KSSL_VERSION_MAJ;
   echo1.id = 0x12345679;
   zero_operation(&req);
@@ -417,12 +437,11 @@ void kssl_repeat_op_ping(connection *c, int repeat)
   req.opcode = KSSL_OP_PING;
   req.payload_len = 255 + 1;
   req.payload = payload;
-  int i;
   for (i = 0; i < repeat; i++) {
     sprintf(hello, "Hello, World! %d", i);
     memcpy((char *)payload, hello, strlen(hello)+1);
     req.payload_len = strlen(hello)+1;
-    kssl_header *h = kssl(c->ssl, &echo1, &req);
+    h = kssl(c->ssl, &echo1, &req);
     test_assert(h->id == echo1.id);
     test_assert(h->version_maj == KSSL_VERSION_MAJ);
     parse_message_payload(h->data, h->length, &resp);
@@ -438,9 +457,10 @@ void kssl_repeat_op_ping(connection *c, int repeat)
 
 void kssl_op_ping_bad_version(connection *c)
 {
-  test("KSSL_OP_PING with bad version (%d)", c->fd);
   kssl_header echo0;
   kssl_operation req, resp;
+  kssl_header *h;
+  test("KSSL_OP_PING with bad version (%d)", c->fd);
   echo0.id = 0x12345678;
   echo0.version_maj = KSSL_VERSION_MAJ+1;
   zero_operation(&req);
@@ -448,7 +468,7 @@ void kssl_op_ping_bad_version(connection *c)
   req.is_payload_set = 1;
   req.opcode = KSSL_OP_PING;
   req.payload_len = 0;
-  kssl_header *h = kssl(c->ssl, &echo0, &req);
+  h = kssl(c->ssl, &echo0, &req);
   test_assert(h->version_maj == KSSL_VERSION_MAJ);
   test_assert(h->id == echo0.id);
   parse_message_payload(h->data, h->length, &resp);
@@ -460,11 +480,13 @@ void kssl_op_ping_bad_version(connection *c)
 
 void kssl_op_rsa_decrypt(connection *c, RSA *private)
 {
-  test("KSSL_OP_RSA_DECRYPT (%d)", c->fd);
   static int count = 0;
   char kryptos2[255];
   kssl_header decrypt;
   kssl_operation req, resp;
+  kssl_header *h;
+  int size;
+  test("KSSL_OP_RSA_DECRYPT (%d)", c->fd);
   decrypt.version_maj = KSSL_VERSION_MAJ;
   decrypt.id = 0x1234567a;
   zero_operation(&req);
@@ -482,14 +504,14 @@ void kssl_op_rsa_decrypt(connection *c, RSA *private)
   sprintf(kryptos2, "%02x It was totally invisible, how's that possible?", count);
   count += 1;
 
-  int size = RSA_public_encrypt(strlen(kryptos2), (unsigned char *)kryptos2,
+  size = RSA_public_encrypt(strlen(kryptos2), (unsigned char *)kryptos2,
                                 (unsigned char *)req.payload,
                                 private, RSA_PKCS1_PADDING);
   if (size == -1) {
     fatal_error("Failed to RSA encrypt");
   }
 
-  kssl_header *h = kssl(c->ssl, &decrypt, &req);
+  h = kssl(c->ssl, &decrypt, &req);
   test_assert(h->id == decrypt.id);
   test_assert(h->version_maj == KSSL_VERSION_MAJ);
   parse_message_payload(h->data, h->length, &resp);
@@ -503,8 +525,6 @@ void kssl_op_rsa_decrypt(connection *c, RSA *private)
 
 void kssl_op_rsa_sign(connection *c, RSA *private, int opcode)
 {
-  test("KSSL_OP_RSA_SIGN_* (%d)", c->fd);
-
   #define ALGS_COUNT 6
   int algs[ALGS_COUNT] = {KSSL_OP_RSA_SIGN_MD5SHA1, KSSL_OP_RSA_SIGN_SHA1, KSSL_OP_RSA_SIGN_SHA224,
                           KSSL_OP_RSA_SIGN_SHA256, KSSL_OP_RSA_SIGN_SHA384, KSSL_OP_RSA_SIGN_SHA512};
@@ -521,13 +541,14 @@ void kssl_op_rsa_sign(connection *c, RSA *private, int opcode)
       "123456789012345678901234567890123456789012345678",                  // SHA384 is 48 bytes
       "1234567890123456789012345678901234567890123456789012345678901234"}; // SHA512 is 64 bytes
 
-  int i;
+  int i, rc;
+  kssl_header *h;
+  test("KSSL_OP_RSA_SIGN_* (%d)", c->fd);
   for (i = 0; i < ALGS_COUNT; i++) {
-    if (opcode != algs[i] && opcode != 0) continue;
     kssl_header sign;
-
     kssl_operation req, resp;
-    sign.version_maj = KSSL_VERSION_MAJ;
+    if (opcode != algs[i] && opcode != 0) continue;
+	sign.version_maj = KSSL_VERSION_MAJ;
     sign.id = 0x1234567a;
     zero_operation(&req);
     req.is_opcode_set = 1;
@@ -542,13 +563,13 @@ void kssl_op_rsa_sign(connection *c, RSA *private, int opcode)
     req.payload_len = strlen(digests[i]);
     req.opcode = algs[i];
 
-    kssl_header *h = kssl(c->ssl, &sign, &req);
+    h = kssl(c->ssl, &sign, &req);
     test_assert(h->id == sign.id);
     test_assert(h->version_maj == KSSL_VERSION_MAJ);
     parse_message_payload(h->data, h->length, &resp);
     test_assert(resp.opcode == KSSL_OP_RESPONSE);
 
-    int rc = RSA_verify(nids[i], (unsigned char *)digests[i], strlen(digests[i]), resp.payload, resp.payload_len, private);
+    rc = RSA_verify(nids[i], (unsigned char *)digests[i], strlen(digests[i]), resp.payload, resp.payload_len, private);
     test_assert(rc == 1);
 
     free(h);
@@ -578,11 +599,10 @@ void kssl_repeat_op_rsa_sign(connection *c, RSA *private, int repeat, int opcode
   int i, j;
   kssl_header *h;
   for (i = 0; i < ALGS_COUNT; i++) {
-    if (opcode != algs[i]) continue;
-
     kssl_header sign;
-
     kssl_operation req, resp;
+
+	if (opcode != algs[i]) continue;
     sign.version_maj = KSSL_VERSION_MAJ;
     sign.id = 0x1234567a;
     zero_operation(&req);
@@ -613,11 +633,14 @@ void kssl_repeat_op_rsa_sign(connection *c, RSA *private, int repeat, int opcode
 
 void kssl_op_rsa_decrypt_bad_data(connection *c, RSA *private)
 {
-  test("KSSL_OP_RSA_DECRYPT with bad data (%d)", c->fd);
   char *kryptos2 = "It was totally invisible, how's that possible?";
   BYTE *payload = malloc(RSA_size(private));
   kssl_header decrypt;
   kssl_operation req, resp;
+  int size;
+  kssl_header *h;
+
+  test("KSSL_OP_RSA_DECRYPT with bad data (%d)", c->fd);
   decrypt.version_maj = KSSL_VERSION_MAJ;
   decrypt.id = 0x1234567a;
   zero_operation(&req);
@@ -633,7 +656,7 @@ void kssl_op_rsa_decrypt_bad_data(connection *c, RSA *private)
   digest_public_modulus(private, req.digest);
   req.opcode = KSSL_OP_RSA_DECRYPT;
 
-  int size = RSA_public_encrypt(strlen(kryptos2), (unsigned char *)kryptos2,
+  size = RSA_public_encrypt(strlen(kryptos2), (unsigned char *)kryptos2,
                                 (unsigned char *)payload,
                                 private, RSA_PKCS1_PADDING);
   if (size == -1) {
@@ -641,7 +664,7 @@ void kssl_op_rsa_decrypt_bad_data(connection *c, RSA *private)
   }
 
   memset(payload, 0, size);
-  kssl_header *h = kssl(c->ssl, &decrypt, &req);
+  h = kssl(c->ssl, &decrypt, &req);
   test_assert(h->id == decrypt.id);
   test_assert(h->version_maj == KSSL_VERSION_MAJ);
   parse_message_payload(h->data, h->length, &resp);
@@ -657,6 +680,9 @@ void kssl_op_rsa_decrypt_bad_data(connection *c, RSA *private)
 // the passed in port number
 connection *ssl_connect(SSL_CTX *ctx, int port)
 {
+  struct sockaddr_in addr;
+  struct hostent *localhost;
+  int rc;
   connection *c = (connection *)calloc(1, sizeof(connection));
 
   c->fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -664,17 +690,16 @@ connection *ssl_connect(SSL_CTX *ctx, int port)
     fatal_error("Can't create TCP socket");
   }
 
-  struct hostent *localhost = gethostbyname("localhost");
+  localhost = gethostbyname("localhost");
   if (!localhost) {
     fatal_error("Could not look up address of localhost");
   }
 
-  struct sockaddr_in addr;
   memset(&addr, 0, sizeof(struct sockaddr_in));
   addr.sin_family = AF_INET;
   addr.sin_port = htons(port);
   addr.sin_addr.s_addr = ((struct in_addr*)(localhost->h_addr_list[0]))->s_addr;
-  bzero(&(addr.sin_zero), 8);
+  memset(&(addr.sin_zero), 0, 8);
 
   if (connect(c->fd, (struct sockaddr *)&addr, sizeof(struct sockaddr_in)) == -1) {
     fatal_error("Failed to connect to keyserver on port %d", port);
@@ -686,7 +711,7 @@ connection *ssl_connect(SSL_CTX *ctx, int port)
   }
   SSL_set_fd(c->ssl, c->fd);
 
-  int rc = SSL_connect(c->ssl);
+  rc = SSL_connect(c->ssl);
   if (rc != 1) {
     fatal_error("TLS handshake error %d\n", SSL_get_error(c->ssl, rc));
   }
@@ -711,13 +736,16 @@ void ssl_disconnect(connection *c)
 
 void kssl_op_rsa_decrypt_bad_digest(connection *c, RSA *private)
 {
-  test("KSSL_OP_RSA_DECRYPT with bad digest (%d)", c->fd);
   char *kryptos2 = "It was totally invisible, how's that possible?";
   BYTE *payload = malloc(RSA_size(private));
   kssl_header decrypt;
+  int size;
+  kssl_header *h;
+  kssl_operation req, resp;
+
+  test("KSSL_OP_RSA_DECRYPT with bad digest (%d)", c->fd);
   decrypt.version_maj = KSSL_VERSION_MAJ;
   decrypt.id = 0x1234567a;
-  kssl_operation req, resp;
   zero_operation(&req);
   req.is_opcode_set = 1;
   req.is_payload_set = 1;
@@ -728,7 +756,7 @@ void kssl_op_rsa_decrypt_bad_digest(connection *c, RSA *private)
   req.payload = payload;
   req.payload_len = RSA_size(private);
 
-  int size = RSA_public_encrypt(strlen(kryptos2), (unsigned char *)kryptos2,
+  size = RSA_public_encrypt(strlen(kryptos2), (unsigned char *)kryptos2,
                                 (unsigned char *)payload,
                                 private, RSA_PKCS1_PADDING);
   if (size == -1) {
@@ -736,7 +764,7 @@ void kssl_op_rsa_decrypt_bad_digest(connection *c, RSA *private)
   }
 
   req.digest[0] ^= 0xff;
-  kssl_header *h = kssl(c->ssl, &decrypt, &req);
+  h = kssl(c->ssl, &decrypt, &req);
   test_assert(h->id == decrypt.id);
   test_assert(h->version_maj == KSSL_VERSION_MAJ);
   parse_message_payload(h->data, h->length, &resp);
@@ -773,6 +801,11 @@ int main(int argc, char *argv[])
   char *client_cert = 0;
   char *client_key = 0;
   char *ca_file = 0;
+  const SSL_METHOD *method;
+  RSA *private;
+  FILE *fp;
+  SSL_CTX *ctx;
+  connection *c0, *c1, *c2, *c;
 
   const struct option long_options[] = {
     {"port",        required_argument, 0, 0},
@@ -832,13 +865,13 @@ int main(int argc, char *argv[])
 
   SSL_library_init();
   SSL_load_error_strings();
-  const SSL_METHOD *method = TLSv1_2_client_method();
+  method = TLSv1_2_client_method();
 
-  FILE *fp = fopen(private_key, "r");
+  fp = fopen(private_key, "r");
   if (!fp) {
     fatal_error("Failed to open private key file %s", private_key);
   }
-  RSA *private = PEM_read_RSAPrivateKey(fp, 0, 0, 0);
+  private = PEM_read_RSAPrivateKey(fp, 0, 0, 0);
   fclose(fp);
   if (!private) {
     ssl_error();
@@ -848,7 +881,7 @@ int main(int argc, char *argv[])
     fatal_error("Private RSA key from file %s is not valid", private_key);
   }
 
-  SSL_CTX *ctx = SSL_CTX_new(method);
+  ctx = SSL_CTX_new(method);
 
   if (!ctx) {
     ssl_error();
@@ -872,8 +905,6 @@ int main(int argc, char *argv[])
   }
 
   // Use a new connection for each test
-  connection *c0;
-
   c0 = ssl_connect(ctx, port);
   kssl_bad_opcode(c0);
   ssl_disconnect(c0);
@@ -916,7 +947,7 @@ int main(int argc, char *argv[])
 
   // Use a single connection to perform tests in sequence
 
-  connection *c = ssl_connect(ctx, port);
+  c = ssl_connect(ctx, port);
   kssl_bad_opcode(c);
   kssl_op_pong(c);
   kssl_op_error(c);
@@ -931,8 +962,8 @@ int main(int argc, char *argv[])
 
   // Make two connections and perform interleaved tests
 
-  connection *c1 = ssl_connect(ctx, port);
-  connection *c2 = ssl_connect(ctx, port);
+  c1 = ssl_connect(ctx, port);
+  c2 = ssl_connect(ctx, port);
   kssl_bad_opcode(c1);
   kssl_bad_opcode(c2);
   kssl_op_pong(c1);
@@ -987,51 +1018,52 @@ int main(int argc, char *argv[])
   ssl_disconnect(c2);
   ssl_disconnect(c1);
 
-  connection *c3 = ssl_connect(ctx, port);
+  c3 = ssl_connect(ctx, port);
   kssl_repeat_op_ping(c3, 18);
   ssl_disconnect(c3);
 
-  // Compute timing for various operations
-  #define LOOP_COUNT 1000
-  int i, j, k;
-  int algs[ALGS_COUNT] = {KSSL_OP_RSA_SIGN_MD5SHA1, KSSL_OP_RSA_SIGN_SHA1, KSSL_OP_RSA_SIGN_SHA224,
+  {
+    // Compute timing for various operations
+    #define LOOP_COUNT 1000
+    int i, j, k;
+    int algs[ALGS_COUNT] = {KSSL_OP_RSA_SIGN_MD5SHA1, KSSL_OP_RSA_SIGN_SHA1, KSSL_OP_RSA_SIGN_SHA224,
                           KSSL_OP_RSA_SIGN_SHA256, KSSL_OP_RSA_SIGN_SHA384, KSSL_OP_RSA_SIGN_SHA512};
-  struct timeval stop, start;
-  c1 = ssl_connect(ctx, port);
-  for (i = 0; i < ALGS_COUNT; i++) {
-    gettimeofday(&start, NULL);
-    kssl_repeat_op_rsa_sign(c1, private, LOOP_COUNT, algs[i]);
-    gettimeofday(&stop, NULL);
-    printf("\n %d sequential %s takes %ld ms\n", LOOP_COUNT, opstring(algs[i]),
-        (stop.tv_sec - start.tv_sec) * 1000 +
-        (stop.tv_usec - start.tv_usec) / 1000);
-  }
-  ssl_disconnect(c1);
-
-  for (i = 0; i < ALGS_COUNT; i++) {
-    gettimeofday(&start, NULL);
+    struct timeval stop, start;
     c1 = ssl_connect(ctx, port);
-    kssl_repeat_op_rsa_sign(c1, private, LOOP_COUNT, algs[i]);
-    ssl_disconnect(c1);
-    gettimeofday(&stop, NULL);
-    printf("\n %d sequential %s with one connection takes %ld ms\n", LOOP_COUNT, opstring(algs[i]),
-        (stop.tv_sec - start.tv_sec) * 1000 +
-        (stop.tv_usec - start.tv_usec) / 1000);
-  }
-
-  for (i = 0; i < ALGS_COUNT; i++) {
-    gettimeofday(&start, NULL);
-    for (j = 0; j < LOOP_COUNT/10; j++) {
-      c1 = ssl_connect(ctx, port);
-      kssl_repeat_op_rsa_sign(c1, private, 10, algs[i]);
-      ssl_disconnect(c1);
+    for (i = 0; i < ALGS_COUNT; i++) {
+      gettimeofday(&start, NULL);
+      kssl_repeat_op_rsa_sign(c1, private, LOOP_COUNT, algs[i]);
+      gettimeofday(&stop, NULL);
+      printf("\n %d sequential %s takes %ld ms\n", LOOP_COUNT, opstring(algs[i]),
+          (stop.tv_sec - start.tv_sec) * 1000 +
+          (stop.tv_usec - start.tv_usec) / 1000);
     }
-    gettimeofday(&stop, NULL);
-    printf("\n %d sequential %s with 10 requests per re-connection takes %ld ms\n", LOOP_COUNT, opstring(algs[i]),
-        (stop.tv_sec - start.tv_sec) * 1000 +
-        (stop.tv_usec - start.tv_usec) / 1000);
-  }
+    ssl_disconnect(c1);
 
+    for (i = 0; i < ALGS_COUNT; i++) {
+      gettimeofday(&start, NULL);
+      c1 = ssl_connect(ctx, port);
+      kssl_repeat_op_rsa_sign(c1, private, LOOP_COUNT, algs[i]);
+      ssl_disconnect(c1);
+      gettimeofday(&stop, NULL);
+      printf("\n %d sequential %s with one connection takes %ld ms\n", LOOP_COUNT, opstring(algs[i]),
+          (stop.tv_sec - start.tv_sec) * 1000 +
+          (stop.tv_usec - start.tv_usec) / 1000);
+    }
+
+    for (i = 0; i < ALGS_COUNT; i++) {
+      gettimeofday(&start, NULL);
+      for (j = 0; j < LOOP_COUNT/10; j++) {
+        c1 = ssl_connect(ctx, port);
+        kssl_repeat_op_rsa_sign(c1, private, 10, algs[i]);
+        ssl_disconnect(c1);
+      }
+      gettimeofday(&stop, NULL);
+      printf("\n %d sequential %s with 10 requests per re-connection takes %ld ms\n", LOOP_COUNT, opstring(algs[i]),
+          (stop.tv_sec - start.tv_sec) * 1000 +
+          (stop.tv_usec - start.tv_usec) / 1000);
+    }
+  }
 #if THREADED_TEST
   // 2 pthreads: currently blocked by openssl thread-safety
   pthread_t thread[LOOP_COUNT];
@@ -1057,35 +1089,36 @@ int main(int argc, char *argv[])
 #endif // THREADED_TEST
 
   // Test requests over multiple processes
-  int forks[8] = {1, 2, 4, 8, 16, 32, 64, 128};
-  pid_t pid[LOOP_COUNT];
-  signing_data data[LOOP_COUNT];
-  for (k = 0; k < 8; k++) {
-    for (i = 0; i < ALGS_COUNT; i++) {
-      gettimeofday(&start, NULL);
-      for (j = 0; j < forks[k]; j++) {
-        data[j].ctx = ctx;
-        data[j].private = private;
-        data[j].port = port;
-        data[j].repeat = LOOP_COUNT / forks[k];
-        data[j].alg = algs[i];
-        pid[j] = fork();
-        if (pid[j] == 0) {
-          thread_repeat_rsa_sign((void *)&data[j]);
-          exit(0);
+  {
+    int forks[8] = {1, 2, 4, 8, 16, 32, 64, 128};
+    pid_t pid[LOOP_COUNT];
+    signing_data data[LOOP_COUNT];
+    for (k = 0; k < 8; k++) {
+      for (i = 0; i < ALGS_COUNT; i++) {
+        gettimeofday(&start, NULL);
+        for (j = 0; j < forks[k]; j++) {
+          data[j].ctx = ctx;
+          data[j].private = private;
+          data[j].port = port;
+          data[j].repeat = LOOP_COUNT / forks[k];
+          data[j].alg = algs[i];
+          pid[j] = fork();
+          if (pid[j] == 0) {
+            thread_repeat_rsa_sign((void *)&data[j]);
+            exit(0);
+          }
         }
+        for (j = 0; j < forks[k]; j++) {
+          waitpid(pid[j], NULL, 0);
+        }
+        gettimeofday(&stop, NULL);
+        printf("\n %d requests %s over %d forks takes %ld ms\n", LOOP_COUNT,
+            opstring(algs[i]), forks[k],
+            (stop.tv_sec - start.tv_sec) * 1000 +
+            (stop.tv_usec - start.tv_usec) / 1000);
       }
-      for (j = 0; j < forks[k]; j++) {
-        waitpid(pid[j], NULL, 0);
-      }
-      gettimeofday(&stop, NULL);
-      printf("\n %d requests %s over %d forks takes %ld ms\n", LOOP_COUNT,
-          opstring(algs[i]), forks[k],
-          (stop.tv_sec - start.tv_sec) * 1000 +
-          (stop.tv_usec - start.tv_usec) / 1000);
-    }
+	}
   }
-
   SSL_CTX_free(ctx);
 
   printf("\nAll %d tests passed\n", tests);

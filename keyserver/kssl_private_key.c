@@ -3,8 +3,6 @@
 //
 // Copyright (c) 2013 CloudFlare, Inc.
 
-#include <unistd.h>
-
 #include <openssl/ssl.h>
 #include <openssl/err.h>
 #include <openssl/conf.h>
@@ -71,10 +69,10 @@ static void digest_public_modulus(RSA *key, BYTE *digest)
 {
   // QUESTION: can we use a single EVP_MD_CTX for multiple
   // digests?
-
+  char *hex;
   EVP_MD_CTX *ctx = EVP_MD_CTX_create();
   EVP_DigestInit_ex(ctx, EVP_sha256(), 0);
-  char *hex = BN_bn2hex(key->n);
+  hex = BN_bn2hex(key->n);
   EVP_DigestUpdate(ctx, hex, strlen(hex));
   EVP_DigestFinal_ex(ctx, digest, 0);
   EVP_MD_CTX_destroy(ctx);
@@ -145,12 +143,15 @@ void free_pk_list(pk_list list) {
 // occurs. Adds the private key to the list if successful.
 kssl_error_code add_key_from_file(const char *path, // Path to file containing key
 								  pk_list list) {   // Array of private keys from new_pk_list
+  FILE *fp;
+  RSA *local_key;
+
   if (!list) {
     write_log("Assigning to NULL");
     return KSSL_ERROR_INTERNAL;
   }
 
-  FILE *fp = fopen(path, "r");
+  fp = fopen(path, "r");
   if (!fp) {
     write_log("Failed to open private key file %s", path);
     return KSSL_ERROR_INTERNAL;
@@ -161,7 +162,7 @@ kssl_error_code add_key_from_file(const char *path, // Path to file containing k
     return KSSL_ERROR_INTERNAL;
   }
 
-  RSA * local_key = PEM_read_RSAPrivateKey(fp, 0, 0, 0);
+  local_key = PEM_read_RSAPrivateKey(fp, 0, 0, 0);
   fclose(fp);
 
   if (local_key == NULL) {

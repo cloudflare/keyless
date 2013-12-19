@@ -5,6 +5,12 @@
 #ifndef INCLUDED_KSSL_HELPERS
 #define INCLUDED_KSSL_HELPERS 1
 
+#ifdef _MSC_VER
+#define PLATFORM_WINDOWS 1
+#else
+#define PLATFORM_WINDOWS 0
+#endif
+
 // Helper macros for known sizes of V1 items
 #define KSSL_OPCODE_ITEM_SIZE (KSSL_ITEM_HEADER_SIZE + 1)
 #define KSSL_ERROR_ITEM_SIZE (KSSL_ITEM_HEADER_SIZE + 1)
