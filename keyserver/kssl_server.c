@@ -531,7 +531,9 @@ void signal_cb(struct ev_loop *loop, ev_signal *w, int events)
 {
   int i;
   for (i = 0; i < num_processes; i++) {
-	kill(child_watcher[i].rpid, SIGTERM);
+	if (child_watcher[i].rpid != 0) {
+	  kill(child_watcher[i].rpid, SIGTERM);
+	}
   }
 
   ev_signal_stop(loop, &sigint_watcher);
@@ -570,6 +572,11 @@ void cleanup(struct ev_loop *loop, SSL_CTX *ctx, pk_list privates)
 void child_cb(struct ev_loop *loop, struct ev_child *child, int events)
 {
   ev_child_stop(loop, child);
+
+  // This means that the parent signal_cb will not bother trying to 
+  // kill this child on exit since it has already exited.
+
+  child->rpid = 0;
 }
 
 int main(int argc, char *argv[])
