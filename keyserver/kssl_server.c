@@ -522,22 +522,19 @@ void server_cb(struct ev_loop *loop, struct ev_io *watcher, int events)
 
 int num_processes = DEFAULT_PROCESSES;
 struct ev_child child_watcher[MAX_PROCESSES];
+pid_t pids[MAX_PROCESSES];
 
-ev_signal sigint_watcher;
-ev_signal sigterm_watcher;
-
-// signal_cb: handle SIGINT/SIGTERM and terminates program cleanly
+// signal_cb: handle SIGTERM and terminates program cleanly
 void signal_cb(struct ev_loop *loop, ev_signal *w, int events)
 {
   int i;
   for (i = 0; i < num_processes; i++) {
-	if (child_watcher[i].rpid != 0) {
-	  kill(child_watcher[i].rpid, SIGTERM);
+	if (pids[i] != 0) {
+	  kill(pids[i], SIGTERM);
 	}
   }
 
-  ev_signal_stop(loop, &sigint_watcher);
-  ev_signal_stop(loop, &sigterm_watcher);
+  ev_signal_stop(loop, w);
 }
 
 // child_signal_cb: handle SIGTERM and terminate a child
@@ -576,7 +573,13 @@ void child_cb(struct ev_loop *loop, struct ev_child *child, int events)
   // This means that the parent signal_cb will not bother trying to 
   // kill this child on exit since it has already exited.
 
-  child->rpid = 0;
+  int i;
+  for (i = 0; i < num_processes; i++) {
+	if (pids[i] == child->rpid) {
+	  pids[i] = 0;
+	  break;
+	}
+  }
 }
 
 int main(int argc, char *argv[])
@@ -810,7 +813,6 @@ int main(int argc, char *argv[])
     free(pid_file);
   }
 
-  pid_t pids[MAX_PROCESSES];
   for (i = 0; i < num_processes; i++) {
     int pid = fork();
     if (pid == 0) {
@@ -850,8 +852,7 @@ int main(int argc, char *argv[])
 
   struct ev_loop *loop = ev_default_loop(0);
 
-  ev_signal_init(&sigint_watcher, signal_cb, SIGINT);
-  ev_signal_start(loop, &sigint_watcher);
+  ev_signal sigterm_watcher;
   ev_signal_init(&sigterm_watcher, signal_cb, SIGTERM);
   ev_signal_start(loop, &sigterm_watcher);
 

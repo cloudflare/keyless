@@ -124,7 +124,7 @@ pk_list new_pk_list(int count) {
   return list;
 }
 
-// free_ok_list: frees an array of private keys created with a call
+// free_pk_list: frees an array of private keys created with a call
 // to new_pk_list
 void free_pk_list(pk_list list) {
   if (list) {
