@@ -35,7 +35,7 @@ typedef struct {
 // Possible item tags
 
 #define KSSL_TAG_DIGEST     0x01 // An RSA key digest (see
-                                 // digest_pubilc_modulus)
+                                 // digest_public_modulus)
 #define KSSL_TAG_SNI        0x02 // Server name (optional)
 #define KSSL_TAG_CLIENT_IP  0x03 // Client IP (4 bytes for IPv4, 16 for IPv6)
 #define KSSL_TAG_OPCODE     0x11 // Requested operation (one of KSSL_OP_*)
