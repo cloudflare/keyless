@@ -19,10 +19,10 @@ extern int silent;
 // kssl_operate: create a serialized response from a KSSL request
 // header and payload
 kssl_error_code kssl_operate(kssl_header *header,
-							 BYTE *payload,
-							 pk_list privates,
-							 BYTE **out_response,
-							 int *out_response_len) {
+                             BYTE *payload,
+                             pk_list privates,
+                             BYTE **out_response,
+                             int *out_response_len) {
   kssl_error_code err = KSSL_ERROR_NONE;
   BYTE *local_resp = NULL;
   int local_resp_len = 0;
@@ -79,7 +79,7 @@ kssl_error_code kssl_operate(kssl_header *header,
     {
       unsigned int payload_size;
       int max_payload_size;
-	  int key_id;
+      int key_id;
 
       if (request.is_digest_set == 0) {
         err = KSSL_ERROR_FORMAT;
@@ -152,9 +152,9 @@ exit:
 
 // see core.h
 kssl_error_code kssl_error(DWORD id,
-						   BYTE error,
-						   BYTE **response,
-						   int *response_len) {
+                           BYTE error,
+                           BYTE **response,
+                           int *response_len) {
   kssl_header e;
   int offset = 0;
   int size = KSSL_HEADER_SIZE + KSSL_OPCODE_ITEM_SIZE + KSSL_ERROR_ITEM_SIZE;

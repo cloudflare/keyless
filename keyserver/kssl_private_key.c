@@ -127,7 +127,7 @@ pk_list new_pk_list(int count) {
 void free_pk_list(pk_list list) {
   if (list) {
     if (list->privates) {
-	  int j;
+      int j;
 
       for (j = 0; j < list->current; ++j) {
         RSA_free(list->privates[j].key);
@@ -142,7 +142,7 @@ void free_pk_list(pk_list list) {
 // KSSL_ERROR_NONE if successful, or a KSSL_ERROR_* if a problem
 // occurs. Adds the private key to the list if successful.
 kssl_error_code add_key_from_file(const char *path, // Path to file containing key
-								  pk_list list) {   // Array of private keys from new_pk_list
+                                  pk_list list) {   // Array of private keys from new_pk_list
   FILE *fp;
   RSA *local_key;
 
@@ -186,7 +186,7 @@ kssl_error_code add_key_from_file(const char *path, // Path to file containing k
 // In this implementation key id is the index into the list of privates.
 // A negative return indicates an error.
 int find_private_key(pk_list list,   // Array of private keys from new_pk_list
-					 BYTE *digest) { // Digest of key searched for (see digest_public_modulus)
+                     BYTE *digest) { // Digest of key searched for (see digest_public_modulus)
   int j;
   int found = 0;
   for (j = 0; j < list->current; j++) {
@@ -206,27 +206,27 @@ int find_private_key(pk_list list,   // Array of private keys from new_pk_list
 
 // private_key_operation: perform a private key operation
 kssl_error_code private_key_operation(pk_list list,         // Private key array from new_pk_list
-									  int key_id,           // ID of key in pk_list from find_private_key
-									  int opcode,           // Opcode from a KSSL message indicating the operation
-									  int length,           // Length of data in message
-									  BYTE *message,        // Bytes to perform operation on
-									  BYTE *out,            // Buffer into which operation output is written
-									  unsigned int *size) { // Size of returned data written here
+                                      int key_id,           // ID of key in pk_list from find_private_key
+                                      int opcode,           // Opcode from a KSSL message indicating the operation
+                                      int length,           // Length of data in message
+                                      BYTE *message,        // Bytes to perform operation on
+                                      BYTE *out,            // Buffer into which operation output is written
+                                      unsigned int *size) { // Size of returned data written here
   int rc = KSSL_ERROR_NONE;
 
   // Currently, we only support decrypt or sign here
 
   if (opcode == KSSL_OP_RSA_DECRYPT) {
     int s = RSA_private_decrypt(length, message, out, list->privates[key_id].key,
-							 RSA_PKCS1_PADDING);
+                             RSA_PKCS1_PADDING);
     if (s != -1) {
-	  *size = (unsigned int)s;
+      *size = (unsigned int)s;
     } else {
       rc = KSSL_ERROR_CRYPTO_FAILED;
     }
   } else {
     if (RSA_sign(opcode_to_digest_nid(opcode), message, length, out, size,
-				 list->privates[key_id].key) != 1) {
+                 list->privates[key_id].key) != 1) {
       rc = KSSL_ERROR_CRYPTO_FAILED;
     }
   }
@@ -236,7 +236,7 @@ kssl_error_code private_key_operation(pk_list list,         // Private key array
 
 // key_size: returns the size of an RSA key in bytes
 int key_size(pk_list list,  // Array of private keys from new_pk_list
-			 int key_id) {  // ID of key from find_private_key
+             int key_id) {  // ID of key from find_private_key
   return RSA_size(list->privates[key_id].key);
 }
 

@@ -339,9 +339,9 @@ kssl_error_code read_message(connection_state *state) {
         // Nothing to read so wait for an event notification by exiting
         // this function, or SSL needs to do a write (typically because of
         // a connection regnegotiation happening) and so an SSL_read
-		// isn't possible right now. In either case return from this
-		// function and wait for a callback indicating that the socket
-		// is ready for a read.
+        // isn't possible right now. In either case return from this
+        // function and wait for a callback indicating that the socket
+        // is ready for a read.
 
       case SSL_ERROR_WANT_READ:
       case SSL_ERROR_WANT_WRITE:
@@ -364,9 +364,9 @@ kssl_error_code read_message(connection_state *state) {
 
       // Read some number of bytes into the state->current buffer so move that
       // pointer on and reduce the state->need. If there's still more
-	  // needed then loop around to see if we can read it. This is
-	  // essential because we will only get a single event when data
-	  // becomes ready and will need to read it all.
+      // needed then loop around to see if we can read it. This is
+      // essential because we will only get a single event when data
+      // becomes ready and will need to read it all.
 
       state->need -= read;
       state->current += read;
@@ -532,9 +532,9 @@ void signal_cb(struct ev_loop *loop, ev_signal *w, int events)
 {
   int i;
   for (i = 0; i < num_processes; i++) {
-	if (pids[i] != 0) {
-	  kill(pids[i], SIGTERM);
-	}
+    if (pids[i] != 0) {
+      kill(pids[i], SIGTERM);
+    }
   }
 
   ev_signal_stop(loop, w);
@@ -578,10 +578,10 @@ void child_cb(struct ev_loop *loop, struct ev_child *child, int events)
 
   int i;
   for (i = 0; i < num_processes; i++) {
-	if (pids[i] == child->rpid) {
-	  pids[i] = 0;
-	  break;
-	}
+    if (pids[i] == child->rpid) {
+      pids[i] = 0;
+      break;
+    }
   }
 }
 
@@ -819,15 +819,15 @@ int main(int argc, char *argv[])
   for (i = 0; i < num_processes; i++) {
     int pid = fork();
     if (pid == 0) {
-	  struct ev_loop *loop = ev_default_loop(0);
-	  struct ev_io *server_watcher = (struct ev_io *)malloc(sizeof(struct ev_io));
-	  server_watcher->data = (void *)ctx;
-	  ev_io_init(server_watcher, server_cb, sock, EV_READ);
-	  ev_io_start(loop, server_watcher);
+      struct ev_loop *loop = ev_default_loop(0);
+      struct ev_io *server_watcher = (struct ev_io *)malloc(sizeof(struct ev_io));
+      server_watcher->data = (void *)ctx;
+      ev_io_init(server_watcher, server_cb, sock, EV_READ);
+      ev_io_start(loop, server_watcher);
 
-	  ev_signal signal_watcher;
-	  ev_signal_init(&signal_watcher, child_signal_cb, SIGTERM);
-	  ev_signal_start(loop, &signal_watcher);
+      ev_signal signal_watcher;
+      ev_signal_init(&signal_watcher, child_signal_cb, SIGTERM);
+      ev_signal_start(loop, &signal_watcher);
 
       ev_run(loop, 0);
 
@@ -842,11 +842,11 @@ int main(int argc, char *argv[])
         f = n;
       }
 
-	  cleanup(loop, ctx, privates);
+      cleanup(loop, ctx, privates);
       exit(0);
-    } else {												
-	  pids[i] = pid;
-	}
+    } else {
+      pids[i] = pid;
+    }
   }
 
   // PARENT PROCESS
@@ -860,8 +860,8 @@ int main(int argc, char *argv[])
   ev_signal_start(loop, &sigterm_watcher);
 
   for (i = 0; i < num_processes; i++) {
-	  ev_child_init(&child_watcher[i], child_cb, pids[i], 0);  
-	  ev_child_start(loop, &child_watcher[i]);
+    ev_child_init(&child_watcher[i], child_cb, pids[i], 0);  
+    ev_child_start(loop, &child_watcher[i]);
   }
 
   ev_run(loop, 0);

@@ -548,7 +548,7 @@ void kssl_op_rsa_sign(connection *c, RSA *private, int opcode)
     kssl_header sign;
     kssl_operation req, resp;
     if (opcode != algs[i] && opcode != 0) continue;
-	sign.version_maj = KSSL_VERSION_MAJ;
+    sign.version_maj = KSSL_VERSION_MAJ;
     sign.id = 0x1234567a;
     zero_operation(&req);
     req.is_opcode_set = 1;
@@ -602,7 +602,7 @@ void kssl_repeat_op_rsa_sign(connection *c, RSA *private, int repeat, int opcode
     kssl_header sign;
     kssl_operation req, resp;
 
-	if (opcode != algs[i]) continue;
+    if (opcode != algs[i]) continue;
     sign.version_maj = KSSL_VERSION_MAJ;
     sign.id = 0x1234567a;
     zero_operation(&req);
@@ -1117,7 +1117,7 @@ int main(int argc, char *argv[])
             (stop.tv_sec - start.tv_sec) * 1000 +
             (stop.tv_usec - start.tv_usec) / 1000);
       }
-	}
+    }
   }
   SSL_CTX_free(ctx);
 
