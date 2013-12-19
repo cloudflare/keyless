@@ -30,9 +30,9 @@
 
 // parse_header: populates a kssl_header structure from a byte stream. Returns 
 // KSSL_ERROR_NONE if successful.
-int parse_header(BYTE *bytes,           // Stream of bytes containing a kssl_header
-				 kssl_header *header) { // Returns the populated header (must be allocated
-                                        // by caller)
+kssl_error_code parse_header(BYTE *bytes,            // Stream of bytes containing a kssl_header
+							 kssl_header *header) {  // Returns the populated header (must be allocated
+                                                     // by caller)
   if (bytes == NULL || header == NULL) {
     return KSSL_ERROR_INTERNAL;
   }
@@ -51,11 +51,11 @@ int parse_header(BYTE *bytes,           // Stream of bytes containing a kssl_hea
 // NOTE: The payload for the item is not copied, a reference
 // to the original stream is added to the kssl_item struct. The offset
 // is updated if provided. Returns KSSL_ERROR_NONE if successful.
-int parse_item(BYTE *bytes,       // Byte stream to parse kssl_item from
-			   int *offset,       // (optional) if present specifies offset 
-			                      // into bytes.
-			   kssl_item *item) { // The kssl_item parsed (must be allocated
-                                  // by caller)
+kssl_error_code parse_item(BYTE *bytes,       // Byte stream to parse kssl_item from
+						   int *offset,       // (optional) if present specifies offset 
+						                      // into bytes.
+						   kssl_item *item) { // The kssl_item parsed (must be allocated
+                                              // by caller)
   if (bytes == NULL || item == NULL) {
     return KSSL_ERROR_INTERNAL;
   }
@@ -85,13 +85,13 @@ int parse_item(BYTE *bytes,       // Byte stream to parse kssl_item from
 // flatten_header: serialize a header into a pre-allocated byte array
 // at a given offset. The offset is updated as bytes are written.  If
 // offset pointer is NULL this function starts at offset 0.
-int flatten_header(kssl_header *header, // Pointer to kssl_header to
-				                        // seriaize
-				   BYTE *bytes,         // Byte buffer to write into
-				                        // (must be allocated and have
-				                        // sufficient space for a kssl_header)
-				   int *offset) {       // (optional) offset into bytes to
-                                        // write to
+kssl_error_code flatten_header(kssl_header *header, // Pointer to kssl_header to
+							                        // serialize
+							   BYTE *bytes,         // Byte buffer to write into
+							                        // (must be allocated and have
+			 				                        // sufficient space for a kssl_header)
+							   int *offset) {       // (optional) offset into bytes to
+                                                    // write to
   if (bytes == NULL || header == NULL) {
     return KSSL_ERROR_INTERNAL;
   }
@@ -117,13 +117,13 @@ int flatten_header(kssl_header *header, // Pointer to kssl_header to
 // byte payload at an offset. The offset is updated as bytes are written.
 // If offset pointer is NULL this function starts at offset 0. Returns
 // KSSL_ERROR_NONE if successful.
-int flatten_item_byte(BYTE tag,      // The kssl_item's tag (see kssl.h)
-					  BYTE payload,  // A single byte for the payload
-					  BYTE *bytes,   // Buffer into which kssl_item is
-					                 // written (must be pre-allocated and
-					                 // have room)
-					  int *offset) { // (optional) offset into bytes to start
-                                     // writing at
+kssl_error_code flatten_item_byte(BYTE tag,      // The kssl_item's tag (see kssl.h)
+								  BYTE payload , // A single byte for the payload
+								  BYTE *bytes,   // Buffer into which kssl_item is
+								                 // written (must be pre-allocated and
+					                             // have room)
+								  int *offset) { // (optional) offset into bytes to start
+                                                 // writing at
   if (bytes == NULL) {
     return KSSL_ERROR_INTERNAL;
   }
@@ -147,11 +147,11 @@ int flatten_item_byte(BYTE tag,      // The kssl_item's tag (see kssl.h)
 // flatten_item: Serialize a single kssl_item. The offset is updated
 // as bytes are written. If offset pointer is NULL this function
 // starts at offset 0. Returns KSSL_ERROR_NONE if successful.
-int flatten_item(BYTE tag,         // The kssl_item's tag (see kssl.h)
-				 BYTE *payload,    // Buffer containing the item's payload
-				 WORD payload_len, // Length of data from payload to copy
-				 BYTE *bytes,      // Buffer into which item is serialized
-				 int *offset) {    // (optional) offset into bytes to write from
+kssl_error_code flatten_item(BYTE tag,         // The kssl_item's tag (see kssl.h)
+							 BYTE *payload,    // Buffer containing the item's payload
+							 WORD payload_len, // Length of data from payload to copy
+							 BYTE *bytes,      // Buffer into which item is serialized
+							 int *offset) {    // (optional) offset into bytes to write from
   if (bytes == NULL) {
     return KSSL_ERROR_INTERNAL;
   }
@@ -175,10 +175,10 @@ int flatten_item(BYTE tag,         // The kssl_item's tag (see kssl.h)
 }
 
 // flatten_operation: serialize a kssl_operation
-int flatten_operation(kssl_header *header,       // 
-					  kssl_operation *operation, //
-					  BYTE **out_operation,      //
-					  int *length) {             //
+kssl_error_code flatten_operation(kssl_header *header,       // 
+								  kssl_operation *operation, //
+								  BYTE **out_operation,      //
+								  int *length) {             //
   if (header == NULL        ||
 	  operation == NULL     ||
 	  out_operation == NULL ||
@@ -252,9 +252,9 @@ void zero_operation(kssl_operation *operation) {
 
 // parse_message_payload: parse a message payload into a
 // kssl_operation struct
-int parse_message_payload(BYTE *payload,               //
-						  int len,                     //
-						  kssl_operation *operation) { //
+kssl_error_code parse_message_payload(BYTE *payload,               //
+									  int len,                     //
+									  kssl_operation *operation) { //
   if (payload == NULL || operation == NULL) {
     return KSSL_ERROR_INTERNAL;
   }

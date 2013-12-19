@@ -1,4 +1,5 @@
-// keyserver.c: TLSv1.2 server for the CloudFlare Keyless SSL protocol
+// kssl_server.c: TLSv1.2 server for the CloudFlare Keyless SSL
+// protocol
 //
 // Copyright (c) 2013 CloudFlare, Inc.
 
@@ -10,9 +11,6 @@
 #include <openssl/err.h>
 #include <openssl/conf.h>
 #include <openssl/engine.h>
-
-#include <sys/types.h>
-#include <sys/wait.h>
 
 #include <stdarg.h>
 #include <getopt.h>
@@ -45,7 +43,7 @@ void fatal_error(const char *fmt, ...)
   va_start(l, fmt);
   vfprintf(stderr, fmt, l);
   va_end(l);
-  printf("\n");
+  fprintf(stderr, "\n");
 
   exit(1);
 }
@@ -189,7 +187,7 @@ void write_error(connection_state *state, DWORD id, BYTE error)
   int size = 0;
   BYTE *resp = NULL;
 
-  int err = kssl_error(id, error, &resp, &size);
+  kssl_error_code err = kssl_error(id, error, &resp, &size);
   if (err != KSSL_ERROR_INTERNAL) {
     queue_write(state, resp, size);
   }
@@ -259,8 +257,8 @@ void watcher_terminate(struct ev_loop *loop, struct ev_io *watcher) {
   free(state);
 }
 
-// write all messages in the queue onto the wire
-int write_queued_messages(connection_state *state) {
+// write_queued_message: write all messages in the queue onto the wire
+kssl_error_code write_queued_messages(connection_state *state) {
   SSL *ssl = state->ssl;
   while ((state->qr != state->qw) && (state->q[state->qr].len > 0)) {
     queued *q = &state->q[state->qr];
@@ -301,7 +299,7 @@ int write_queued_messages(connection_state *state) {
 
       default:
         log_ssl_error(ssl, rc);
-        return -2;
+        return KSSL_ERROR_INTERNAL;
       }
     }
 
@@ -310,12 +308,12 @@ int write_queued_messages(connection_state *state) {
     break;
   }
 
-  return 0;
+  return KSSL_ERROR_NONE;
 }
 
 // clear_read_queue: a message of unknown version was sent, so ignore
 // the rest of the message
-int clear_read_queue(connection_state *state) {
+void clear_read_queue(connection_state *state) {
   SSL *ssl = state->ssl;
   int read = 0;
   BYTE ignore[1024];
@@ -323,12 +321,10 @@ int clear_read_queue(connection_state *state) {
   do {
     read = SSL_read(ssl, ignore, 1024);
   } while (read > 0);
-
-  return 0;
 }
 
 // read_message: read up to state->need bytes into state->current
-int read_message(connection_state *state) {
+kssl_error_code read_message(connection_state *state) {
   SSL *ssl = state->ssl;
   int read = 0;
 
@@ -339,10 +335,10 @@ int read_message(connection_state *state) {
 
         // Nothing to read so wait for an event notification by exiting
         // this function, or SSL needs to do a write (typically because of
-        // a connection regnegotiation happening) and so an SSL_read isn't
-        // possible right now. In either case return from this function
-        // and wait for a callback indicating that the socket is ready
-        // for a read.
+        // a connection regnegotiation happening) and so an SSL_read
+		// isn't possible right now. In either case return from this
+		// function and wait for a callback indicating that the socket
+		// is ready for a read.
 
       case SSL_ERROR_WANT_READ:
       case SSL_ERROR_WANT_WRITE:
@@ -362,11 +358,12 @@ int read_message(connection_state *state) {
         return KSSL_ERROR_INTERNAL;
       }
     } else {
+
       // Read some number of bytes into the state->current buffer so move that
-      // pointer on and reduce the state->need. If there's still more needed
-      // then loop around to see if we can read it. This is essential because we
-      // will only get a single event when data becomes ready and will need to read
-      // it all.
+      // pointer on and reduce the state->need. If there's still more
+	  // needed then loop around to see if we can read it. This is
+	  // essential because we will only get a single event when data
+	  // becomes ready and will need to read it all.
 
       state->need -= read;
       state->current += read;
@@ -380,7 +377,7 @@ int read_message(connection_state *state) {
 // or is ready to write
 void connection_cb(struct ev_loop *loop, struct ev_io *watcher, int events)
 {
-  int err = 0;
+  kssl_error_code err;
   kssl_header header;
 
   connection_state *state = (connection_state *)watcher->data;
@@ -523,10 +520,56 @@ void server_cb(struct ev_loop *loop, struct ev_io *watcher, int events)
   fcntl(client, F_SETFL, flags);
 }
 
-// sigint_cb: handle SIGINT and terminate program cleanly
-void sigint_cb(struct ev_loop *loop, ev_signal *w, int events)
+int num_processes = DEFAULT_PROCESSES;
+struct ev_child child_watcher[MAX_PROCESSES];
+
+ev_signal sigint_watcher;
+ev_signal sigterm_watcher;
+
+// signal_cb: handle SIGINT/SIGTERM and terminates program cleanly
+void signal_cb(struct ev_loop *loop, ev_signal *w, int events)
 {
+  int i;
+  for (i = 0; i < num_processes; i++) {
+	kill(child_watcher[i].rpid, SIGTERM);
+  }
+
+  ev_signal_stop(loop, &sigint_watcher);
+  ev_signal_stop(loop, &sigterm_watcher);
+}
+
+// child_signal_cb: handle SIGTERM and terminate a child
+void child_signal_cb(struct ev_loop *loop, ev_signal *w, int events)
+{
+  ev_signal_stop(loop, w);
   ev_break(loop, EVBREAK_ALL);
+}
+
+// cleanup: cleanup state. This is a function because it is needed by
+// children and parent.
+void cleanup(struct ev_loop *loop, SSL_CTX *ctx, pk_list privates)
+{
+  ev_loop_destroy(loop);
+  SSL_CTX_free(ctx);
+  
+  free_pk_list(privates);
+  
+  // This monstrous sequence of calls is attempting to clean up all
+  // the memory allocated by SSL_library_init() which has no analagous
+  // SSL_library_free()!
+
+  CONF_modules_unload(1);
+  EVP_cleanup();
+  ENGINE_cleanup();
+  CRYPTO_cleanup_all_ex_data();
+  ERR_remove_state(0);
+  ERR_free_strings();
+}
+
+// child_cb: when a child has terminated stop receiving events for it.
+void child_cb(struct ev_loop *loop, struct ev_child *child, int events)
+{
+  ev_child_stop(loop, child);
 }
 
 int main(int argc, char *argv[])
@@ -538,7 +581,6 @@ int main(int argc, char *argv[])
   char *cipher_list = 0;
   char *ca_file = 0;
   char *pid_file = 0;
-  int num_processes = DEFAULT_PROCESSES;
 
   const struct option long_options[] = {
     {"port",                  required_argument, 0, 0},
@@ -748,56 +790,6 @@ int main(int argc, char *argv[])
     fatal_error("Failed to listen on TCP socket");
   }
 
-  struct ev_loop *loop = ev_default_loop(0);
-  struct ev_io *server_watcher = (struct ev_io *)malloc(sizeof(struct ev_io));
-  server_watcher->data = (void *)ctx;
-  ev_io_init(server_watcher, server_cb, sock, EV_READ);
-  ev_io_start(loop, server_watcher);
-
-  ev_signal signal_watcher;
-  ev_signal_init(&signal_watcher, sigint_cb, SIGINT);
-  ev_signal_start(loop, &signal_watcher);
-
-  pid_t pid[MAX_PROCESSES];
-  for (i = 0; i < num_processes; i++) {
-    pid[i] = fork();
-    if(pid[i] == 0) {
-
-      ev_run(loop, 0);
-
-      ev_io_stop(loop, server_watcher);
-      close(sock);
-      free(server_watcher);
-
-      ev_signal_stop(loop, &signal_watcher);
-
-      connection_state *f = active;
-      while (f) {
-        connection_state *n = f->next;
-        watcher_terminate(loop, f->watcher);
-        f = n;
-      }
-
-      ev_loop_destroy(loop);
-      SSL_CTX_free(ctx);
-
-      free_pk_list(privates);
-
-      // This monstrous sequence of calls is attempting to clean up all
-      // the memory allocated by SSL_library_init() which has no analagous
-      // SSL_library_free()!
-
-      CONF_modules_unload(1);
-      EVP_cleanup();
-      ENGINE_cleanup();
-      CRYPTO_cleanup_all_ex_data();
-      ERR_remove_state(0);
-      ERR_free_strings();
-
-      return 0;
-    }
-  }
-
   if (pid_file) {
     FILE *fp = fopen(pid_file, "w");
     if (fp) {
@@ -811,9 +803,58 @@ int main(int argc, char *argv[])
     free(pid_file);
   }
 
+  pid_t pids[MAX_PROCESSES];
   for (i = 0; i < num_processes; i++) {
-    waitpid(pid[i], NULL, 0);
+    int pid = fork();
+    if (pid == 0) {
+	  struct ev_loop *loop = ev_default_loop(0);
+	  struct ev_io *server_watcher = (struct ev_io *)malloc(sizeof(struct ev_io));
+	  server_watcher->data = (void *)ctx;
+	  ev_io_init(server_watcher, server_cb, sock, EV_READ);
+	  ev_io_start(loop, server_watcher);
+
+	  ev_signal signal_watcher;
+	  ev_signal_init(&signal_watcher, child_signal_cb, SIGTERM);
+	  ev_signal_start(loop, &signal_watcher);
+
+      ev_run(loop, 0);
+
+      ev_io_stop(loop, server_watcher);
+      close(sock);
+      free(server_watcher);
+
+      connection_state *f = active;
+      while (f) {
+        connection_state *n = f->next;
+        watcher_terminate(loop, f->watcher);
+        f = n;
+      }
+
+	  cleanup(loop, ctx, privates);
+      exit(0);
+    } else {												
+	  pids[i] = pid;
+	}
   }
+
+  // PARENT PROCESS
+
+  close(sock);
+
+  struct ev_loop *loop = ev_default_loop(0);
+
+  ev_signal_init(&sigint_watcher, signal_cb, SIGINT);
+  ev_signal_start(loop, &sigint_watcher);
+  ev_signal_init(&sigterm_watcher, signal_cb, SIGTERM);
+  ev_signal_start(loop, &sigterm_watcher);
+
+  for (i = 0; i < num_processes; i++) {
+	  ev_child_init(&child_watcher[i], child_cb, pids[i], 0);  
+	  ev_child_start(loop, &child_watcher[i]);
+  }
+
+  ev_run(loop, 0);
+  cleanup(loop, ctx, privates);
 
   return 0;
 }

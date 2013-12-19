@@ -53,7 +53,7 @@ ifneq ($(wildcard $(PID_FILE)),)
 PID := $(shell cat $(PID_FILE))
 run: ; @echo kssl_server running as PID $(PID)
 kill:
-	@kill -INT $(PID)
+	@kill $(PID)
 	@rm -f $(PID_FILE)
 else
 run: all $(call marker,$(TMP))
