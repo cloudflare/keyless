@@ -748,19 +748,6 @@ int main(int argc, char *argv[])
     fatal_error("Failed to listen on TCP socket");
   }
 
-  if (pid_file) {
-    FILE *fp = fopen(pid_file, "w");
-    if (fp) {
-      fprintf(fp, "%d\n", getpid());
-      fclose(fp);
-    } else {
-      SSL_CTX_free(ctx);
-      close(sock);
-      fatal_error("Can't write to pid file %s", pid_file);
-    }
-    free(pid_file);
-  }
-
   struct ev_loop *loop = ev_default_loop(0);
   struct ev_io *server_watcher = (struct ev_io *)malloc(sizeof(struct ev_io));
   server_watcher->data = (void *)ctx;
@@ -809,6 +796,19 @@ int main(int argc, char *argv[])
 
       return 0;
     }
+  }
+
+  if (pid_file) {
+    FILE *fp = fopen(pid_file, "w");
+    if (fp) {
+      fprintf(fp, "%d\n", getpid());
+      fclose(fp);
+    } else {
+      SSL_CTX_free(ctx);
+      close(sock);
+      fatal_error("Can't write to pid file %s", pid_file);
+    }
+    free(pid_file);
   }
 
   for (i = 0; i < num_processes; i++) {
