@@ -20,11 +20,10 @@ include $(GMSL_DIR)/gmsl
 # http://www.cmcrossroads.com/ask-mr-make/6936-making-directories-in-gnu-make
 # for rationale.
 
-marker = $1/.f
-make_dir = $(eval $1/.f: ; @mkdir -p $$(dir $$@) ; touch $$@)
+marker = $1.f
+make_dir = $(eval $1.f: ; @mkdir -p $$(dir $$@) ; touch $$@)
 
 TMP := tmp/
-$(call make_dir,$(TMP))
 
 OBJ := o/
 SERVER_OBJS := $(addprefix $(OBJ)kssl_,server.o helpers.o core.o private_key.o log.o)
@@ -36,13 +35,15 @@ EXECS := $(addprefix $(OBJ)kssl_,server testclient)
 all: $(OBJ) $(EXECS)
 clean: ; @rm -rf $(OBJ)
 
+$(call make_dir,$(TMP))
+
 # Note the use of a # comment at the end of VALGRIND_COMMAND to ensure
 # that there is a trailing space
 
 VALGRIND_COMMAND :=
 ifeq ($(VALGRIND),1)
 VALGRIND_LOG := valgrind.log
-VALGRIND_COMMAND := valgrind --leak-check=yes --log-file=$(VALGRIND_LOG) #
+VALGRIND_COMMAND := valgrind --leak-check=yes --log-file=$(VALGRIND_LOG) --show-reachable=yes #
 endif
 
 PORT := $(shell perl free-port.pl)
@@ -56,6 +57,9 @@ kill:
 	@rm -f $(PID_FILE)
 else
 run: all $(call marker,$(TMP))
+ifeq ($(VALGRIND),1)
+	@rm -f $(VALGRIND_LOG)
+endif
 	@$(VALGRIND_COMMAND)$(OBJ)kssl_server --port=$(PORT) --server-cert=server-cert/cert.pem --server-key=server-cert/key.pem --private-key-directory=keys --cipher-list=ECDHE-RSA-AES128-SHA256:AES128-GCM-SHA256:RC4:HIGH:!MD5:!aNULL:!EDH --ca-file=$(CA_FILE) --pid-file=$(PID_FILE) --silent --num-processes=4 &
 ifeq ($(VALGRIND),1)
 	@echo $$! > $(PID_FILE)
