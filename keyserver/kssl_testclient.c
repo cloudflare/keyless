@@ -41,7 +41,7 @@ void fatal_error(const char *fmt, ...)
   va_start(l, fmt);
   vfprintf(stderr, fmt, l);
   va_end(l);
-  printf("\n");
+  fprintf(stderr, "\n");
 
   exit(1);
 }
