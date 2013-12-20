@@ -7,7 +7,6 @@ VERSION   := 1.0
 ITERATION := $(shell date +%s)
 REVISION  := $(shell git log -n1 --pretty=format:%h)
 
-
 # Turn on absolutely all warnings and turn them into errors
 
 CFLAGS += -g -Wall -Wextra -Wno-unused-parameter -Werror
@@ -92,7 +91,7 @@ $(call make_dir,$(TMP))
 
 VALGRIND_COMMAND :=
 ifeq ($(VALGRIND),1)
-VALGRIND_LOG := valgrind.log
+VALGRIND_LOG := $(TMP)valgrind.log
 VALGRIND_COMMAND := valgrind --leak-check=yes --log-file=$(VALGRIND_LOG) --show-reachable=yes #
 endif
 
