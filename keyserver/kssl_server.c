@@ -598,7 +598,7 @@ int main(int argc, char *argv[])
   const SSL_METHOD *method;
   SSL_CTX *ctx;
   glob_t g;
-  int rc, privates_count, i, t;
+  int rc, privates_count, sock, i, t;
   struct sockaddr_in addr;
   struct ev_loop *loop;
 
