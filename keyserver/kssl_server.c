@@ -807,19 +807,6 @@ int main(int argc, char *argv[])
     fatal_error("Failed to listen on TCP socket");
   }
 
-  if (pid_file) {
-    FILE *fp = fopen(pid_file, "w");
-    if (fp) {
-      fprintf(fp, "%d\n", getpid());
-      fclose(fp);
-    } else {
-      SSL_CTX_free(ctx);
-      close(sock);
-      fatal_error("Can't write to pid file %s", pid_file);
-    }
-    free(pid_file);
-  }
-
   for (i = 0; i < num_processes; i++) {
     int pid = fork();
     if (pid == 0) {
@@ -866,6 +853,19 @@ int main(int argc, char *argv[])
   for (i = 0; i < num_processes; i++) {
     ev_child_init(&child_watcher[i], child_cb, pids[i], 0);
     ev_child_start(loop, &child_watcher[i]);
+  }
+
+  if (pid_file) {
+    FILE *fp = fopen(pid_file, "w");
+    if (fp) {
+      fprintf(fp, "%d\n", getpid());
+      fclose(fp);
+    } else {
+      SSL_CTX_free(ctx);
+      close(sock);
+      fatal_error("Can't write to pid file %s", pid_file);
+    }
+    free(pid_file);
   }
 
   ev_run(loop, 0);
