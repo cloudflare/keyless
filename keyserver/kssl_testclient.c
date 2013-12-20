@@ -801,11 +801,16 @@ int main(int argc, char *argv[])
   char *client_cert = 0;
   char *client_key = 0;
   char *ca_file = 0;
+
   const SSL_METHOD *method;
   RSA *private;
   FILE *fp;
   SSL_CTX *ctx;
-  connection *c0, *c1, *c2, *c;
+  connection *c0, *c1, *c2, *c3, *c;
+  int i, j, k;
+  struct timeval stop, start;
+  int algs[ALGS_COUNT] = {KSSL_OP_RSA_SIGN_MD5SHA1, KSSL_OP_RSA_SIGN_SHA1, KSSL_OP_RSA_SIGN_SHA224,
+                          KSSL_OP_RSA_SIGN_SHA256, KSSL_OP_RSA_SIGN_SHA384, KSSL_OP_RSA_SIGN_SHA512};
 
   const struct option long_options[] = {
     {"port",        required_argument, 0, 0},
@@ -1025,10 +1030,6 @@ int main(int argc, char *argv[])
   {
     // Compute timing for various operations
     #define LOOP_COUNT 1000
-    int i, j, k;
-    int algs[ALGS_COUNT] = {KSSL_OP_RSA_SIGN_MD5SHA1, KSSL_OP_RSA_SIGN_SHA1, KSSL_OP_RSA_SIGN_SHA224,
-                          KSSL_OP_RSA_SIGN_SHA256, KSSL_OP_RSA_SIGN_SHA384, KSSL_OP_RSA_SIGN_SHA512};
-    struct timeval stop, start;
     c1 = ssl_connect(ctx, port);
     for (i = 0; i < ALGS_COUNT; i++) {
       gettimeofday(&start, NULL);
