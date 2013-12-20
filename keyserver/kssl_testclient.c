@@ -17,12 +17,15 @@
 #if PLATFORM_WINDOWS
 #include <winsock2.h>
 #else
+#include <unistd.h>
 #include <netdb.h>
 #include <sys/socket.h>
 #include <netinet/ip.h>
 #include <pthread.h>
 #include <sys/wait.h>
 #include <getopt.h>
+#include <sys/types.h>
+#include <sys/wait.h>
 #endif
 
 unsigned char ipv6[16] = {0x0, 0xf2, 0x13, 0x48, 0x43, 0x01};
@@ -255,10 +258,26 @@ kssl_header *kssl(SSL *ssl, kssl_header *k, kssl_operation *r)
 
   free(req);
 
-  n = SSL_read(ssl, buf, KSSL_HEADER_SIZE);
-  if (n != KSSL_HEADER_SIZE) {
-    fatal_error("Error receiving KSSL header, size: %d", n);
+  while (1) {
+	n = SSL_read(ssl, buf, KSSL_HEADER_SIZE);
+	if (n <= 0) {
+	  int x = SSL_get_error(ssl, n);
+	  if (x == SSL_ERROR_WANT_READ || x == SSL_ERROR_WANT_WRITE) {
+		continue;
+	  } else if (x == SSL_ERROR_ZERO_RETURN) {
+		fatal_error("Connection closed while reading header\n");
+	  } else {
+		fatal_error("Error performing SSL_read: %x\n", x);
+	  }
+	} else {
+	  if (n != KSSL_HEADER_SIZE) {
+		fatal_error("Error receiving KSSL header, size: %d", n);
+	  }
+	}
+
+	break;
   }
+
 
   parse_header(buf, &h);
   if (h.version_maj != KSSL_VERSION_MAJ) {
@@ -938,7 +957,7 @@ int main(int argc, char *argv[])
   kssl_op_rsa_decrypt(c0, private);
   ssl_disconnect(c0);
 
-  c0 = ssl_connect(ctx, port);
+   c0 = ssl_connect(ctx, port);
   kssl_op_rsa_decrypt_bad_data(c0, private);
   ssl_disconnect(c0);
 
@@ -1120,6 +1139,11 @@ int main(int argc, char *argv[])
       }
     }
   }
+
+  goto skip;
+
+ skip:
+
   SSL_CTX_free(ctx);
 
   printf("\nAll %d tests passed\n", tests);
