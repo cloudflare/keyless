@@ -100,7 +100,6 @@ void test_assert(int a)
   if (!a) {
     fatal_error(" test failure");
   }
-  printf(".");
   tests += 1;
 }
 
@@ -278,7 +277,6 @@ kssl_header *kssl(SSL *ssl, kssl_header *k, kssl_operation *r)
 	break;
   }
 
-
   parse_header(buf, &h);
   if (h.version_maj != KSSL_VERSION_MAJ) {
     fatal_error("Version mismatch %d != %d", h.version_maj, KSSL_VERSION_MAJ);
@@ -292,9 +290,29 @@ kssl_header *kssl(SSL *ssl, kssl_header *k, kssl_operation *r)
   to_return = (kssl_header *)malloc(sizeof(kssl_header));
   memcpy(to_return, &h, sizeof(kssl_header));
 
+
   if (h.length > 0) {
     BYTE *payload = (BYTE *)malloc(h.length);
-    n = SSL_read(ssl, payload, h.length);
+	while (1) {
+	  n = SSL_read(ssl, payload, h.length);
+	  if (n <= 0) {
+		int x = SSL_get_error(ssl, n);
+		if (x == SSL_ERROR_WANT_READ || x == SSL_ERROR_WANT_WRITE) {
+		  continue;
+		} else if (x == SSL_ERROR_ZERO_RETURN) {
+		  fatal_error("Connection closed while reading payload\n");
+		} else {
+		  fatal_error("Error performing SSL_read: %x\n", x);
+		}
+	  } else {
+		if (n != h.length) {
+		  fatal_error("Error receiving KSSL payload, size: %d", n);
+		}
+	  }
+	  
+	  break;
+	}
+
     if (n != h.length) {
       fatal_error("Failed to read payload got length %d wanted %d", n, h.length);
     }
@@ -639,13 +657,13 @@ void kssl_repeat_op_rsa_sign(connection *c, RSA *private, int repeat, int opcode
 
     for (j = 0; j < repeat; j++) {
       h = kssl(c->ssl, &sign, &req);
-    }
-    test_assert(h->id == sign.id);
-    test_assert(h->version_maj == KSSL_VERSION_MAJ);
-    parse_message_payload(h->data, h->length, &resp);
-    test_assert(resp.opcode == KSSL_OP_RESPONSE);
+	  test_assert(h->id == sign.id);
+	  test_assert(h->version_maj == KSSL_VERSION_MAJ);
+	  parse_message_payload(h->data, h->length, &resp);
+	  test_assert(resp.opcode == KSSL_OP_RESPONSE);
+	  free(h);
+	}
 
-    free(h);
     free(req.digest);
   }
 }
@@ -1124,7 +1142,7 @@ int main(int argc, char *argv[])
           data[j].alg = algs[i];
           pid[j] = fork();
           if (pid[j] == 0) {
-            thread_repeat_rsa_sign((void *)&data[j]);
+			thread_repeat_rsa_sign((void *)&data[j]);
             exit(0);
           }
         }
