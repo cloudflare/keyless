@@ -12,10 +12,10 @@ int silent = 0;
 // write_log: call to print an error message to STDERR.
 void write_log(const char *fmt, ...)
 {
+  va_list l;
   if (silent) {
     return;
   }
-  va_list l;
   va_start(l, fmt);
   vfprintf(stderr, fmt, l);
   va_end(l);
