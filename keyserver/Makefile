@@ -2,6 +2,12 @@
 #
 # Copyright (c) 2013 CloudFlare, Inc.
 
+NAME      := kssl_server
+VERSION   := 1.0
+ITERATION := $(shell date +%s)
+REVISION  := $(shell git log -n1 --pretty=format:%h)
+
+
 # Turn on absolutely all warnings and turn them into errors
 
 CFLAGS += -g -Wall -Wextra -Wno-unused-parameter -Werror
@@ -32,6 +38,50 @@ OBJS := $(SERVER_OBJS) $(TEST_OBJS)
 EXECS := $(addprefix $(OBJ)kssl_,server testclient)
 
 .PHONY: all clean test run kill
+
+## CloudFlare-specific targets and configuration
+
+FPM := fakeroot fpm -C $(BUILD_PATH) \
+	-s dir \
+	-t deb \
+	--deb-compression bzip2 \
+	-v $(VERSION) \
+	--iteration $(ITERATION)
+
+DEB_PACKAGE          := $(NAME)_$(VERSION)-$(ITERATION)-${REVISION}_amd64.deb
+BUILD_PATH           := build
+INSTALL_PREFIX       := usr/local
+PACKAGE_REGISTER_BIN ?= /usr/bin/register-cf-package.sh
+KSSL_BUILD_PATH      := $(BUILD_PATH)/$(INSTALL_PREFIX)/$(NAME)
+
+FPM := fakeroot fpm -C $(BUILD_PATH) \
+	-s dir \
+	-t deb \
+	--deb-compression bzip2 \
+	-v $(VERSION) \
+	--iteration $(ITERATION)
+
+$(DEB_PACKAGE): clean all
+	mkdir -p $(KSSL_BUILD_PATH)
+	cp o/$(NAME) $(KSSL_BUILD_PATH)
+	$(FPM) -n $(NAME) $(INSTALL_PREFIX)/$(NAME)
+
+register-%.deb: ; $(PACKAGE_REGISTER_BIN) $*.deb
+
+.PHONY: cf-package
+cf-package: $(DEB_PACKAGE)
+
+.PHONY: register-cf-package
+register-cf-package: cf-package register-$(DEB_PACKAGE)
+
+.PHONY: clean-package
+clean-package:
+	$(RM) -r $(BUILD_PATH)
+	$(RM) $(DEB_PACKAGE)
+
+## end CloudFlare-specific
+
+
 all: $(OBJ) $(EXECS)
 clean: ; @rm -rf $(OBJ)
 
