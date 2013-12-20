@@ -516,6 +516,10 @@ void server_cb(struct ev_loop *loop, struct ev_io *watcher, int events)
     return;
   }
 
+  int flags = fcntl(client, F_GETFL, 0);
+  flags |= O_NONBLOCK;
+  fcntl(client, F_SETFL, flags);
+
   struct ev_io *ssl_watcher = (struct ev_io *)malloc(sizeof(struct ev_io));
   connection_state *state = (connection_state *)malloc(sizeof(connection_state));
   initialize_state(state);
@@ -525,10 +529,6 @@ void server_cb(struct ev_loop *loop, struct ev_io *watcher, int events)
   ssl_watcher->data = (void *)state;
   ev_io_init(ssl_watcher, connection_cb, client, EV_READ | EV_WRITE);
   ev_io_start(loop, ssl_watcher);
-
-  int flags = fcntl(client, F_GETFL, 0);
-  flags |= O_NONBLOCK;
-  fcntl(client, F_SETFL, flags);
 }
 
 int num_processes = DEFAULT_PROCESSES;
