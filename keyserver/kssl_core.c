@@ -147,7 +147,7 @@ exit:
     *out_response_len = local_resp_len;
   }
 
-  return KSSL_ERROR_NONE;
+  return err;
 }
 
 // see core.h
