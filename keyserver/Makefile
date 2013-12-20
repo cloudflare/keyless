@@ -37,6 +37,8 @@ OBJS := $(SERVER_OBJS) $(TEST_OBJS)
 EXECS := $(addprefix $(OBJ)kssl_,server testclient)
 
 .PHONY: all clean test run kill
+all: $(OBJ) $(EXECS)
+clean: ; @rm -rf $(OBJ)
 
 ## CloudFlare-specific targets and configuration
 
@@ -61,11 +63,11 @@ FPM := fakeroot fpm -C $(BUILD_PATH) \
 	--iteration $(ITERATION)
 
 $(DEB_PACKAGE): clean all
-	mkdir -p $(KSSL_BUILD_PATH)
-	cp o/$(NAME) $(KSSL_BUILD_PATH)
-	$(FPM) -n $(NAME) $(INSTALL_PREFIX)/$(NAME)
+	@mkdir -p $(KSSL_BUILD_PATH)
+	@cp o/$(NAME) $(KSSL_BUILD_PATH)
+	@$(FPM) -n $(NAME) $(INSTALL_PREFIX)/$(NAME)
 
-register-%.deb: ; $(PACKAGE_REGISTER_BIN) $*.deb
+register-%.deb: ; @$(PACKAGE_REGISTER_BIN) $*.deb
 
 .PHONY: cf-package
 cf-package: $(DEB_PACKAGE)
@@ -75,14 +77,10 @@ register-cf-package: cf-package register-$(DEB_PACKAGE)
 
 .PHONY: clean-package
 clean-package:
-	$(RM) -r $(BUILD_PATH)
-	$(RM) $(DEB_PACKAGE)
+	@$(RM) -r $(BUILD_PATH)
+	@$(RM) $(DEB_PACKAGE)
 
 ## end CloudFlare-specific
-
-
-all: $(OBJ) $(EXECS)
-clean: ; @rm -rf $(OBJ)
 
 $(call make_dir,$(TMP))
 
@@ -92,7 +90,7 @@ $(call make_dir,$(TMP))
 VALGRIND_COMMAND :=
 ifeq ($(VALGRIND),1)
 VALGRIND_LOG := $(TMP)valgrind.log
-VALGRIND_COMMAND := valgrind --leak-check=yes --log-file=$(VALGRIND_LOG) --show-reachable=yes #
+VALGRIND_COMMAND := valgrind --leak-check=yes --log-file=$(VALGRIND_LOG) --show-reachable=yes --trace-children=yes #
 endif
 
 PORT := $(shell perl free-port.pl)
@@ -110,7 +108,7 @@ run: all $(call marker,$(TMP))
 ifeq ($(VALGRIND),1)
 	@rm -f $(VALGRIND_LOG)
 endif
-	@$(VALGRIND_COMMAND)$(OBJ)kssl_server --port=$(PORT) --server-cert=server-cert/cert.pem --server-key=server-cert/key.pem --private-key-directory=keys --cipher-list=ECDHE-RSA-AES128-SHA256:AES128-GCM-SHA256:RC4:HIGH:!MD5:!aNULL:!EDH --ca-file=$(CA_FILE) --pid-file=$(PID_FILE) --silent --num-processes=4 &> $(SERVER_LOG) $&
+	@$(VALGRIND_COMMAND)$(OBJ)kssl_server --port=$(PORT) --server-cert=server-cert/cert.pem --server-key=server-cert/key.pem --private-key-directory=keys --cipher-list=ECDHE-RSA-AES128-SHA256:AES128-GCM-SHA256:RC4:HIGH:!MD5:!aNULL:!EDH --ca-file=$(CA_FILE) --pid-file=$(PID_FILE) --silent --num-processes=4 &
 ifeq ($(VALGRIND),1)
 	@echo $$! > $(PID_FILE)
 endif
