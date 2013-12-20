@@ -263,9 +263,10 @@ void watcher_terminate(struct ev_loop *loop, struct ev_io *watcher) {
 // write_queued_message: write all messages in the queue onto the wire
 kssl_error_code write_queued_messages(connection_state *state) {
   SSL *ssl = state->ssl;
+  int rc;
   while ((state->qr != state->qw) && (state->q[state->qr].len > 0)) {
     queued *q = &state->q[state->qr];
-    int rc = SSL_write(ssl, q->send, q->len);
+    rc = SSL_write(ssl, q->send, q->len);
 
     if (rc > 0) {
       q->len -= rc;
@@ -382,6 +383,8 @@ void connection_cb(struct ev_loop *loop, struct ev_io *watcher, int events)
 {
   kssl_error_code err;
   kssl_header header;
+  BYTE *response = NULL;
+  int response_len = 0;
 
   connection_state *state = (connection_state *)watcher->data;
   // If the connection is writeable and there is data to write then get on
@@ -462,9 +465,6 @@ void connection_cb(struct ev_loop *loop, struct ev_io *watcher, int events)
   // state->start points to the payload. Note that you cannot rely
   // on header + sizeof(kssl_header) == state->start since
   // they are allocated at different times.
-
-  BYTE *response = NULL;
-  int response_len = 0;
 
   err = kssl_operate(&header, state->start, privates, &response, &response_len);
   if (err != KSSL_ERROR_NONE) {
@@ -553,9 +553,9 @@ void cleanup(struct ev_loop *loop, SSL_CTX *ctx, pk_list privates)
 {
   ev_loop_destroy(loop);
   SSL_CTX_free(ctx);
-  
+
   free_pk_list(privates);
-  
+
   // This monstrous sequence of calls is attempting to clean up all
   // the memory allocated by SSL_library_init() which has no analagous
   // SSL_library_free()!
@@ -594,6 +594,13 @@ int main(int argc, char *argv[])
   char *cipher_list = 0;
   char *ca_file = 0;
   char *pid_file = 0;
+
+  const SSL_METHOD *method;
+  SSL_CTX *ctx;
+  glob_t g;
+  int rc, privates_count, i, t;
+  struct sockaddr_in addr;
+  struct ev_loop *loop;
 
   const struct option long_options[] = {
     {"port",                  required_argument, 0, 0},
@@ -680,8 +687,8 @@ int main(int argc, char *argv[])
   SSL_library_init();
   SSL_load_error_strings();
 
-  const SSL_METHOD *method = TLSv1_2_server_method();
-  SSL_CTX *ctx = SSL_CTX_new(method);
+  method = TLSv1_2_server_method();
+  ctx = SSL_CTX_new(method);
 
   if (!ctx) {
     ssl_error();
@@ -732,7 +739,6 @@ int main(int argc, char *argv[])
   // files that end with .key and the part before the .key is taken to
   // be the DNS name.
 
-  glob_t g;
   g.gl_pathc  = 0;
   g.gl_offs   = 0;
 
@@ -741,7 +747,7 @@ int main(int argc, char *argv[])
   strcpy(pattern, private_key_directory);
   strcat(pattern, starkey);
 
-  int rc = glob(pattern, GLOB_NOSORT, 0, &g);
+  rc = glob(pattern, GLOB_NOSORT, 0, &g);
 
   if (rc != 0) {
     SSL_CTX_free(ctx);
@@ -755,14 +761,13 @@ int main(int argc, char *argv[])
 
   free(private_key_directory);
 
-  int privates_count = g.gl_pathc;
+  privates_count = g.gl_pathc;
   privates = new_pk_list(privates_count);
   if (privates == NULL) {
     SSL_CTX_free(ctx);
     fatal_error("Failed to allocate room for private keys");
   }
 
-  int i;
   for (i = 0; i < privates_count; ++i) {
     if (add_key_from_file(g.gl_pathv[i], privates) != 0) {
       SSL_CTX_free(ctx);
@@ -773,19 +778,18 @@ int main(int argc, char *argv[])
   free(pattern);
   globfree(&g);
 
-  int sock = socket(AF_INET, SOCK_STREAM, 0);
+  sock = socket(AF_INET, SOCK_STREAM, 0);
   if (sock == -1) {
     SSL_CTX_free(ctx);
     fatal_error("Can't create TCP socket");
   }
 
-  int t = 1;
+  t = 1;
   if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &t, sizeof(int)) == -1) {
     SSL_CTX_free(ctx);
     fatal_error("Failed to set socket option SO_REUSERADDR");
   }
 
-  struct sockaddr_in addr;
   addr.sin_family = AF_INET;
   addr.sin_port = htons(port);
   addr.sin_addr.s_addr = INADDR_ANY;
@@ -819,8 +823,8 @@ int main(int argc, char *argv[])
   for (i = 0; i < num_processes; i++) {
     int pid = fork();
     if (pid == 0) {
-      struct ev_loop *loop = ev_default_loop(0);
       struct ev_io *server_watcher = (struct ev_io *)malloc(sizeof(struct ev_io));
+      loop = ev_default_loop(0);
       server_watcher->data = (void *)ctx;
       ev_io_init(server_watcher, server_cb, sock, EV_READ);
       ev_io_start(loop, server_watcher);
@@ -853,14 +857,14 @@ int main(int argc, char *argv[])
 
   close(sock);
 
-  struct ev_loop *loop = ev_default_loop(0);
+  loop = ev_default_loop(0);
 
   ev_signal sigterm_watcher;
   ev_signal_init(&sigterm_watcher, signal_cb, SIGTERM);
   ev_signal_start(loop, &sigterm_watcher);
 
   for (i = 0; i < num_processes; i++) {
-    ev_child_init(&child_watcher[i], child_cb, pids[i], 0);  
+    ev_child_init(&child_watcher[i], child_cb, pids[i], 0);
     ev_child_start(loop, &child_watcher[i]);
   }
 
