@@ -258,23 +258,23 @@ kssl_header *kssl(SSL *ssl, kssl_header *k, kssl_operation *r)
   free(req);
 
   while (1) {
-	n = SSL_read(ssl, buf, KSSL_HEADER_SIZE);
-	if (n <= 0) {
-	  int x = SSL_get_error(ssl, n);
-	  if (x == SSL_ERROR_WANT_READ || x == SSL_ERROR_WANT_WRITE) {
-		continue;
-	  } else if (x == SSL_ERROR_ZERO_RETURN) {
-		fatal_error("Connection closed while reading header\n");
-	  } else {
-		fatal_error("Error performing SSL_read: %x\n", x);
-	  }
-	} else {
-	  if (n != KSSL_HEADER_SIZE) {
-		fatal_error("Error receiving KSSL header, size: %d", n);
-	  }
-	}
+    n = SSL_read(ssl, buf, KSSL_HEADER_SIZE);
+    if (n <= 0) {
+      int x = SSL_get_error(ssl, n);
+      if (x == SSL_ERROR_WANT_READ || x == SSL_ERROR_WANT_WRITE) {
+        continue;
+      } else if (x == SSL_ERROR_ZERO_RETURN) {
+        fatal_error("Connection closed while reading header\n");
+      } else {
+        fatal_error("Error performing SSL_read: %x\n", x);
+      }
+    } else {
+      if (n != KSSL_HEADER_SIZE) {
+        fatal_error("Error receiving KSSL header, size: %d", n);
+      }
+    }
 
-	break;
+    break;
   }
 
   parse_header(buf, &h);
@@ -293,25 +293,25 @@ kssl_header *kssl(SSL *ssl, kssl_header *k, kssl_operation *r)
 
   if (h.length > 0) {
     BYTE *payload = (BYTE *)malloc(h.length);
-	while (1) {
-	  n = SSL_read(ssl, payload, h.length);
-	  if (n <= 0) {
-		int x = SSL_get_error(ssl, n);
-		if (x == SSL_ERROR_WANT_READ || x == SSL_ERROR_WANT_WRITE) {
-		  continue;
-		} else if (x == SSL_ERROR_ZERO_RETURN) {
-		  fatal_error("Connection closed while reading payload\n");
-		} else {
-		  fatal_error("Error performing SSL_read: %x\n", x);
-		}
-	  } else {
-		if (n != h.length) {
-		  fatal_error("Error receiving KSSL payload, size: %d", n);
-		}
-	  }
-	  
-	  break;
-	}
+    while (1) {
+      n = SSL_read(ssl, payload, h.length);
+      if (n <= 0) {
+        int x = SSL_get_error(ssl, n);
+        if (x == SSL_ERROR_WANT_READ || x == SSL_ERROR_WANT_WRITE) {
+          continue;
+        } else if (x == SSL_ERROR_ZERO_RETURN) {
+          fatal_error("Connection closed while reading payload\n");
+        } else {
+          fatal_error("Error performing SSL_read: %x\n", x);
+        }
+      } else {
+        if (n != h.length) {
+          fatal_error("Error receiving KSSL payload, size: %d", n);
+        }
+      }
+      
+      break;
+    }
 
     if (n != h.length) {
       fatal_error("Failed to read payload got length %d wanted %d", n, h.length);
@@ -657,12 +657,12 @@ void kssl_repeat_op_rsa_sign(connection *c, RSA *private, int repeat, int opcode
 
     for (j = 0; j < repeat; j++) {
       h = kssl(c->ssl, &sign, &req);
-	  test_assert(h->id == sign.id);
-	  test_assert(h->version_maj == KSSL_VERSION_MAJ);
-	  parse_message_payload(h->data, h->length, &resp);
-	  test_assert(resp.opcode == KSSL_OP_RESPONSE);
-	  free(h);
-	}
+      test_assert(h->id == sign.id);
+      test_assert(h->version_maj == KSSL_VERSION_MAJ);
+      parse_message_payload(h->data, h->length, &resp);
+      test_assert(resp.opcode == KSSL_OP_RESPONSE);
+      free(h);
+    }
 
     free(req.digest);
   }
@@ -1142,7 +1142,7 @@ int main(int argc, char *argv[])
           data[j].alg = algs[i];
           pid[j] = fork();
           if (pid[j] == 0) {
-			thread_repeat_rsa_sign((void *)&data[j]);
+            thread_repeat_rsa_sign((void *)&data[j]);
             exit(0);
           }
         }
