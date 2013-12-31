@@ -14,7 +14,7 @@
 #include "kssl_helpers.h"
 
 #if PLATFORM_WINDOWS
-#include <winsock2.h>
+#include <winsock.h>
 #else
 #include <unistd.h>
 #include <sys/socket.h>
