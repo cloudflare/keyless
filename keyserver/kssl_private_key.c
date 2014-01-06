@@ -34,15 +34,13 @@ struct pk_list_ {
 
 // ssl_error: call when a fatal SSL error occurs. Exits the program
 // with return code 1.
-static void ssl_error()
-{
+static void ssl_error() {
   ERR_print_errors_fp(stderr);
   exit(1);
 }
 
 // opcode_to_digest_nid: returns NID suitable to use in RSA_sign().
-static int opcode_to_digest_nid(BYTE opcode)
-{
+static int opcode_to_digest_nid(BYTE opcode) {
   switch (opcode) {
     case KSSL_OP_RSA_SIGN_MD5SHA1:
       return NID_md5_sha1;
@@ -65,10 +63,7 @@ static int opcode_to_digest_nid(BYTE opcode)
 // hexadecimal representation of the public modulus of an RSA
 // key. digest must be initialized with at least 32 bytes of
 // space and is used to return the SHA256 digest.
-static void digest_public_modulus(RSA *key, BYTE *digest)
-{
-  // QUESTION: can we use a single EVP_MD_CTX for multiple
-  // digests?
+static void digest_public_modulus(RSA *key, BYTE *digest) {
   char *hex;
   EVP_MD_CTX *ctx = EVP_MD_CTX_create();
   EVP_DigestInit_ex(ctx, EVP_sha256(), 0);
@@ -81,8 +76,7 @@ static void digest_public_modulus(RSA *key, BYTE *digest)
 
 // constant_time_eq: compare to blocks of memory in constant time,
 // returns 1 if they are equal, 0 if not.
-static int constant_time_eq(BYTE *x, BYTE *y, int len)
-{
+static int constant_time_eq(BYTE *x, BYTE *y, int len) {
   BYTE z = 0;
   int i;
   for (i = 0; i < len; ++i) {
@@ -96,6 +90,36 @@ static int constant_time_eq(BYTE *x, BYTE *y, int len)
 
   return z;
 }
+
+// add_key_from_bio: adds an RSA key from a BIO pointer, returns
+// KSSL_ERROR_NONE if successful, or a KSSL_ERROR_* if a problem
+// occurs. Adds the private key to the list if successful.
+static kssl_error_code add_key_from_bio(BIO *key_bp,     // BIO Key value in PEM format
+                                        pk_list list) {  // Array of private keys 
+  RSA *local_key;
+
+  local_key = PEM_read_bio_RSAPrivateKey(key_bp, 0, 0, 0);
+  if (local_key == NULL) {
+    ssl_error();
+  }
+
+  if (list->current >= list->allocated) {
+    write_log("Private key list maximum reached");
+    return KSSL_ERROR_INTERNAL;
+  }
+
+  if (RSA_check_key(local_key) != 1) {
+    return KSSL_ERROR_INTERNAL;
+  }
+
+  list->privates[list->current].key = local_key;
+  digest_public_modulus(local_key, list->privates[list->current].digest);
+
+  list->current++;
+
+  return KSSL_ERROR_NONE;
+}
+
 
 // Public functions
 
@@ -144,12 +168,8 @@ void free_pk_list(pk_list list) {
 kssl_error_code add_key_from_file(const char *path, // Path to file containing key
                                   pk_list list) {   // Array of private keys from new_pk_list
   FILE *fp;
-  RSA *local_key;
-
-  if (!list) {
-    write_log("Assigning to NULL");
-    return KSSL_ERROR_INTERNAL;
-  }
+  BIO *bp;
+  kssl_error_code err = KSSL_ERROR_NONE;
 
   fp = fopen(path, "r");
   if (!fp) {
@@ -157,28 +177,54 @@ kssl_error_code add_key_from_file(const char *path, // Path to file containing k
     return KSSL_ERROR_INTERNAL;
   }
 
-  if (list->current >= list->allocated) {
-    write_log("Private key list maximum reached");
+  bp = BIO_new(BIO_s_file());
+  if (bp == NULL) {
+    ssl_error();
+  }
+  BIO_set_fp(bp, fp, BIO_NOCLOSE);
+  
+  err = add_key_from_bio(bp, list);
+  if (err != KSSL_ERROR_NONE) {
+    write_log("Private RSA key from file %s is not valid", path);
+    BIO_free(bp);
+    fclose(fp);
+
     return KSSL_ERROR_INTERNAL;
   }
 
-  local_key = PEM_read_RSAPrivateKey(fp, 0, 0, 0);
+  BIO_free(bp);
   fclose(fp);
 
-  if (local_key == NULL) {
+  return KSSL_ERROR_NONE;
+}
+
+// add_key_from_buffer: adds an RSA key from a pointer, returns
+// KSSL_ERROR_NONE if successful, or a KSSL_ERROR_* if a problem
+// occurs. Adds the private key to the list if successful.
+kssl_error_code add_key_from_buffer(const char *key, // Key value in PEM format
+                                    int key_len,     // Length of key in bytes
+                                    pk_list list) {  // Array of private keys 
+  BIO *bp;
+  kssl_error_code err = KSSL_ERROR_NONE;
+
+  if (!list) {
+    write_log("Assigning to NULL");
+    return KSSL_ERROR_INTERNAL;
+  }
+
+  bp = BIO_new_mem_buf((void*)key, key_len);
+  if (bp == NULL) {
     ssl_error();
   }
 
-  if (RSA_check_key(local_key) != 1) {
-    write_log("Private RSA key from file %s is not valid", path);
+  err = add_key_from_bio(bp, list);
+  if (err != KSSL_ERROR_NONE) {
+    write_log("Private RSA key is not valid");
+    BIO_free(bp);
     return KSSL_ERROR_INTERNAL;
   }
 
-  list->privates[list->current].key = local_key;
-  digest_public_modulus(local_key, list->privates[list->current].digest);
-
-  list->current++;
-
+  BIO_free(bp);
   return KSSL_ERROR_NONE;
 }
 
@@ -239,4 +285,5 @@ int key_size(pk_list list,  // Array of private keys from new_pk_list
              int key_id) {  // ID of key from find_private_key
   return RSA_size(list->privates[key_id].key);
 }
+
 
