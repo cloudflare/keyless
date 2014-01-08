@@ -60,7 +60,6 @@ kssl_error_code parse_header(BYTE *bytes,            // Stream of bytes containi
     return KSSL_ERROR_INTERNAL;
   }
 
-
   header->version_maj = READ_BYTE(bytes, offset);
   header->version_min = READ_BYTE(bytes, offset);
   header->length = READ_WORD(bytes, offset);

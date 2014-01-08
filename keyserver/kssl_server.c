@@ -110,7 +110,8 @@ typedef struct _connection_state {
   BYTE *current; // Pointer into start where SSL_read should write to
   int need;      // Number of bytes needed before start is considered 'full'
   int state;     // Current state of the connection (see defines above)
-  BYTE header[KSSL_HEADER_SIZE]; // Complete header once read
+  BYTE wire_header[KSSL_HEADER_SIZE]; // Complete header once read from wire
+  kssl_header header; // Parsed version of the header
   BYTE *payload; // Allocated for payload when necessary
   queued q[QUEUE_LENGTH];
 
@@ -204,11 +205,17 @@ pk_list privates = 0;
 // a complete kssl_header.
 void set_get_header_state(connection_state *state)
 {
-  state->start = state->header;
+  state->start = state->wire_header;
   state->current = state->start;
   state->need = KSSL_HEADER_SIZE;
   state->state = CONNECTION_STATE_GET_HEADER;
   state->payload = 0;
+
+  state->header.version_maj = 0;
+  state->header.version_min = 0;
+  state->header.length = 0;
+  state->header.id = 0;
+  state->header.data = 0;
 }
 
 // set_get_payload_state: puts a connection_state in the state to receive
@@ -327,68 +334,18 @@ void clear_read_queue(connection_state *state) {
   } while (read > 0);
 }
 
-// read_message: read up to state->need bytes into state->current
-kssl_error_code read_message(connection_state *state) {
-  SSL *ssl = state->ssl;
-  int read = 0;
-
-  while (state->need > 0) {
-    read = SSL_read(state->ssl, state->current, state->need);
-    if (read <= 0) {
-      switch (SSL_get_error(ssl, read)) {
-
-        // Nothing to read so wait for an event notification by exiting
-        // this function, or SSL needs to do a write (typically because of
-        // a connection regnegotiation happening) and so an SSL_read
-        // isn't possible right now. In either case return from this
-        // function and wait for a callback indicating that the socket
-        // is ready for a read.
-
-      case SSL_ERROR_WANT_READ:
-      case SSL_ERROR_WANT_WRITE:
-        ERR_clear_error();
-        break;
-
-        // Connection termination
-
-      case SSL_ERROR_ZERO_RETURN:
-        ERR_clear_error();
-        return KSSL_ERROR_INTERNAL;
-
-        // Something went wrong so give up on connetion
-
-      default:
-        log_ssl_error(ssl, read);
-        return KSSL_ERROR_INTERNAL;
-      }
-    } else {
-
-      // Read some number of bytes into the state->current buffer so move that
-      // pointer on and reduce the state->need. If there's still more
-      // needed then loop around to see if we can read it. This is
-      // essential because we will only get a single event when data
-      // becomes ready and will need to read it all.
-
-      state->need -= read;
-      state->current += read;
-    }
-  }
-
-  return 0;
-}
-
 // connection_cb: called when a client SSL connection has data to read
 // or is ready to write
 void connection_cb(struct ev_loop *loop, struct ev_io *watcher, int events)
 {
   kssl_error_code err;
-  kssl_header header;
   BYTE *response = NULL;
   int response_len = 0;
 
   connection_state *state = (connection_state *)watcher->data;
-  // If the connection is writeable and there is data to write then get on
-  // and write it
+
+  // If the connection is writeable and there is data to write then
+  // get on and write it
 
   if (events & EV_WRITE) {
     err = write_queued_messages(state);
@@ -400,85 +357,136 @@ void connection_cb(struct ev_loop *loop, struct ev_io *watcher, int events)
     }
   }
 
-  // If the socket is not readable then we're done. The rest of the function
-  // is to do with reading kssl_headers and handling requests.
+  // If the socket is not readable then we're done. The rest of the
+  // function is to do with reading kssl_headers and handling
+  // requests.
 
   if (!(events & EV_READ)) {
     return;
   }
 
-  // Read in the header
-  err = read_message(state);
-  if (err != KSSL_ERROR_NONE) {
-    if (err == KSSL_ERROR_INTERNAL) {
-      watcher_terminate(loop, watcher);
+  // Read whatever data needs to be read (controlled by state->need)
+
+  while (state->need > 0) {
+    int read;
+
+    read = SSL_read(state->ssl, state->current, state->need);
+    if (read <= 0) {
+      int err = SSL_get_error(state->ssl, read);
+      switch (err) {
+        
+        // Nothing to read so wait for an event notification by exiting
+        // this function, or SSL needs to do a write (typically because of
+        // a connection regnegotiation happening) and so an SSL_read
+        // isn't possible right now. In either case return from this
+        // function and wait for a callback indicating that the socket
+        // is ready for a read.
+        
+      case SSL_ERROR_WANT_READ:
+      case SSL_ERROR_WANT_WRITE:
+        ERR_clear_error();
+        break;
+
+        // Connection termination
+
+      case SSL_ERROR_ZERO_RETURN:
+        ERR_clear_error();
+        watcher_terminate(loop, watcher);
+        break;
+
+        // Something went wrong so give up on connetion
+
+      default:
+        log_ssl_error(state->ssl, read);
+        watcher_terminate(loop, watcher);
+        break;
+      }
+
+      return;
     }
-    return;
-  }
 
-  // Parse the header into the local struct
-  err = parse_header(state->header, &header);
-  if (err != KSSL_ERROR_NONE) {
-    if (err == KSSL_ERROR_INTERNAL) {
-      watcher_terminate(loop, watcher);
+    // Read some number of bytes into the state->current buffer so move that
+    // pointer on and reduce the state->need. If there's still more
+    // needed then loop around to see if we can read it. This is
+    // essential because we will only get a single event when data
+    // becomes ready and will need to read it all.
+    
+    state->need -= read;
+    state->current += read;
+    
+    if (state->need > 0) {
+      continue;
     }
-    return;
-  }
 
-  // All the required data has been read and is in state->start. If it's a header
-  // then do basic checks on the header and then get ready to receive the payload
-  // if there is one. If it's the payload then the entire header and payload can
-  // now be processed.
+    // All the required data has been read and is in state->start. If
+    // it's a header then do basic checks on the header and then get
+    // ready to receive the payload if there is one. If it's the
+    // payload then the entire header and payload can now be
+    // processed.
 
-  if (state->state == CONNECTION_STATE_GET_HEADER) {
-    state->start = 0;
+    if (state->state == CONNECTION_STATE_GET_HEADER) {
+      err = parse_header(state->wire_header, &state->header);
+      if (err != KSSL_ERROR_NONE) {
+        if (err == KSSL_ERROR_INTERNAL) {
+          watcher_terminate(loop, watcher);
+        }
+        return;
+      }
+      
+      state->start = 0;
+      
+      if (state->header.version_maj != KSSL_VERSION_MAJ) {
+        write_log("Message version mismatch %02x != %02x\n", state->header.version_maj, KSSL_VERSION_MAJ);
+        write_error(state, state->header.id, KSSL_ERROR_VERSION_MISMATCH);
+        clear_read_queue(state);
+        free_read_state(state);
+        set_get_header_state(state);
+        return;
+      }
+      
+      // If the header indicates that a payload is coming then read it
+      // before processing the operation requested in the header
+      
+      if (state->header.length > 0) {
+        set_get_payload_state(state, state->header.length);
+        continue;
+      }
+    } if (state->state == CONNECTION_STATE_GET_PAYLOAD) {
 
-    if (header.version_maj != KSSL_VERSION_MAJ) {
-      write_log("Message version mismatch %02x != %02x\n", header.version_maj, KSSL_VERSION_MAJ);
-      write_error(state, header.id, KSSL_ERROR_VERSION_MISMATCH);
-      clear_read_queue(state);
+      // Do nothing here. If we reach here then we know that the
+      // entire payload has been read.
+
+    } else {
+      
+      // This should be unreachable. If this occurs give up processing
+      // and reset.
+      
+      write_log("Connection in unknown state %d", state->state);
       free_read_state(state);
       set_get_header_state(state);
       return;
     }
 
-    // If the header indicates that a payload is coming then read it
-    // before processing the operation requested in the header
-
-    if (header.length > 0) {
-      set_get_payload_state(state, header.length);
-      if (read_message(state) != 0) {
-        return;
-      }
+    // When we reach here state->header is valid and filled in and if
+    // necessary state->start points to the payload.
+    
+    err = kssl_operate(&state->header, state->start, privates, &response, &response_len);
+    if (err != KSSL_ERROR_NONE) {
+      log_err_error();
+    } else  {
+      queue_write(state, response, response_len);
     }
-  } else {
-
-    // This should be unreachable. If this occurs give up processing
-    // and reset.
-
-    write_log("Connection in unknown state %d", state->state);
+    
+    // When this point is reached a complete header (and optional
+    // payload) have been received and processed by the switch()
+    // statement above. So free the allocated memory and get ready to
+    // receive another header.
+    
     free_read_state(state);
     set_get_header_state(state);
+
+    return;
   }
-
-  // When we reach here header is valid and filled in and if necessary
-  // state->start points to the payload. Note that you cannot rely
-  // on header + sizeof(kssl_header) == state->start since
-  // they are allocated at different times.
-
-  err = kssl_operate(&header, state->start, privates, &response, &response_len);
-  if (err != KSSL_ERROR_NONE) {
-    log_err_error();
-  } else  {
-    queue_write(state, response, response_len);
-  }
-
-  // When this point is reached a complete header (and optional payload) have been received
-  // and processed by the switch() statement above. So free the allocated memory and get
-  // ready to receive another header.
-
-  free_read_state(state);
-  set_get_header_state(state);
 }
 
 // server_cb: gets called when the listen socket for the server is
@@ -508,6 +516,10 @@ void server_cb(struct ev_loop *loop, struct ev_io *watcher, int events)
     return;
   }
 
+  int flags = fcntl(client, F_GETFL, 0);
+  flags |= O_NONBLOCK;
+  fcntl(client, F_SETFL, flags);
+
   struct ev_io *ssl_watcher = (struct ev_io *)malloc(sizeof(struct ev_io));
   connection_state *state = (connection_state *)malloc(sizeof(connection_state));
   initialize_state(state);
@@ -517,10 +529,6 @@ void server_cb(struct ev_loop *loop, struct ev_io *watcher, int events)
   ssl_watcher->data = (void *)state;
   ev_io_init(ssl_watcher, connection_cb, client, EV_READ | EV_WRITE);
   ev_io_start(loop, ssl_watcher);
-
-  int flags = fcntl(client, F_GETFL, 0);
-  flags |= O_NONBLOCK;
-  fcntl(client, F_SETFL, flags);
 }
 
 int num_processes = DEFAULT_PROCESSES;
@@ -807,19 +815,6 @@ int main(int argc, char *argv[])
     fatal_error("Failed to listen on TCP socket");
   }
 
-  if (pid_file) {
-    FILE *fp = fopen(pid_file, "w");
-    if (fp) {
-      fprintf(fp, "%d\n", getpid());
-      fclose(fp);
-    } else {
-      SSL_CTX_free(ctx);
-      close(sock);
-      fatal_error("Can't write to pid file %s", pid_file);
-    }
-    free(pid_file);
-  }
-
   for (i = 0; i < num_processes; i++) {
     int pid = fork();
     if (pid == 0) {
@@ -866,6 +861,19 @@ int main(int argc, char *argv[])
   for (i = 0; i < num_processes; i++) {
     ev_child_init(&child_watcher[i], child_cb, pids[i], 0);
     ev_child_start(loop, &child_watcher[i]);
+  }
+
+  if (pid_file) {
+    FILE *fp = fopen(pid_file, "w");
+    if (fp) {
+      fprintf(fp, "%d\n", getpid());
+      fclose(fp);
+    } else {
+      SSL_CTX_free(ctx);
+      close(sock);
+      fatal_error("Can't write to pid file %s", pid_file);
+    }
+    free(pid_file);
   }
 
   ev_run(loop, 0);
