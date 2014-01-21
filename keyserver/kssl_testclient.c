@@ -851,7 +851,7 @@ int main(int argc, char *argv[])
   SSL_CTX *ctx;
   connection *c0, *c1, *c2, *c3, *c;
   int i, j, k;
-  int c;
+  int opt;
   struct timeval stop, start;
   int algs[ALGS_COUNT] = {KSSL_OP_RSA_SIGN_MD5SHA1, KSSL_OP_RSA_SIGN_SHA1, KSSL_OP_RSA_SIGN_SHA224,
                           KSSL_OP_RSA_SIGN_SHA256, KSSL_OP_RSA_SIGN_SHA384, KSSL_OP_RSA_SIGN_SHA512};
@@ -866,12 +866,12 @@ int main(int argc, char *argv[])
   };
 
   while (1) {
-    c = getopt_long(argc, argv, "", long_options, 0);
-    if (c == -1) {
+    opt = getopt_long(argc, argv, "", long_options, 0);
+    if (opt == -1) {
       break;
     }
 
-    switch (c) {
+    switch (opt) {
     case 0:
       port = atoi(optarg);
       break;
