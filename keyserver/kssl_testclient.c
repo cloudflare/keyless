@@ -30,11 +30,6 @@
 unsigned char ipv6[16] = {0x0, 0xf2, 0x13, 0x48, 0x43, 0x01};
 unsigned char ipv4[4] = {127, 0, 0, 1};
 
-#if PLATFORM_WINDOWS
-#define SOCKET_CLOSE closesocket
-#else
-#define SOCKET_CLOSE close
-#endif
 
 // ssl_error: call when a fatal SSL error occurs. Exits the program
 // with return code 1.

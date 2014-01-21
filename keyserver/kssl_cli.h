@@ -1,4 +1,14 @@
+// kssl_cli.h: server and testcode helper functions for keyless ssl
+//
+// Copyright (c) 2013 CloudFlare, Inc.
+
 #include <assert.h>
+
+#if PLATFORM_WINDOWS
+#define SOCKET_CLOSE closesocket
+#else
+#define SOCKET_CLOSE close
+#endif
 
 #if __GNUC__
 #include <getopt.h>
