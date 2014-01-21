@@ -96,7 +96,6 @@ void test(const char *fmt, ...)
   va_end(l);
 }
 
-
 int tests = 0;
 
 // test_assert: assert that some condition is true, fatal
