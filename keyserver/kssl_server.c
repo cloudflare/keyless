@@ -3,6 +3,21 @@
 //
 // Copyright (c) 2013 CloudFlare, Inc.
 
+#include "kssl.h"
+#include "kssl_helpers.h"
+
+#if PLATFORM_WINDOWS
+#include <winsock2.h>
+#else
+#include <unistd.h>
+#include <sys/socket.h>
+#include <sys/wait.h>
+#include <netinet/ip.h>
+#include <getopt.h>
+#endif
+#include <fcntl.h>
+#include <uv.h>
+
 #include <openssl/ssl.h>
 #include <openssl/err.h>
 #include <openssl/conf.h>
@@ -10,25 +25,9 @@
 
 #include <stdarg.h>
 
-#include "kssl.h"
-#include "kssl_helpers.h"
 #include "kssl_cli.h"
 
-#if PLATFORM_WINDOWS
-#include <winsock.h>
-#include <windows.h>
-#else
-#include <unistd.h>
-#include <sys/socket.h>
-#include <sys/wait.h>
-#include <netinet/ip.h>
-#include <getopt.h>
-#include <uv.h>
-#endif
-#include <fcntl.h>
-
 #include "kssl_log.h"
-
 #include "kssl_private_key.h"
 #include "kssl_core.h"
 
@@ -511,7 +510,7 @@ typedef struct _server_data {
 void server_cb(uv_poll_t *watcher, int status, int events)
 {
   server_data *data = (server_data *)watcher->data;
-  int client = accept(data->fd, 0, 0);
+  int client = accept(data->fd, 0, 0)
   if (client == -1) {
     return;
   }
@@ -780,7 +779,7 @@ int main(int argc, char *argv[])
   strcpy(pattern, private_key_directory);
   strcat(pattern, starkey);
 
-#if WINDOWS
+#if HAVE_WINDOWS
   WIN32_FIND_DATA FindFileData;
   HANDLE hFind;
 

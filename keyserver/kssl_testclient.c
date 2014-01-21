@@ -2,21 +2,11 @@
 //
 // Copyright (c) 2013 CloudFlare, Inc.
 
-#include <ctype.h>
-
-#include <openssl/evp.h>
-#include <openssl/ssl.h>
-#include <openssl/err.h>
-
-#include <sys/types.h>
-#include <stdarg.h>
-
 #include "kssl.h"
 #include "kssl_helpers.h"
-#include "kssl_cli.h"
 
 #if PLATFORM_WINDOWS
-#include <winsock.h>
+#include <winsock2.h>
 #else
 #include <unistd.h>
 #include <netdb.h>
@@ -26,6 +16,16 @@
 #include <sys/wait.h>
 #include <sys/types.h>
 #endif
+
+#include <ctype.h>
+
+#include <openssl/evp.h>
+#include <openssl/ssl.h>
+#include <openssl/err.h>
+
+#include <sys/types.h>
+#include <stdarg.h>
+#include "kssl_cli.h"
 
 unsigned char ipv6[16] = {0x0, 0xf2, 0x13, 0x48, 0x43, 0x01};
 unsigned char ipv4[4] = {127, 0, 0, 1};
