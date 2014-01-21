@@ -260,9 +260,9 @@ void watcher_terminate(uv_poll_t *watcher) {
   if (rc == 0) {
     SSL_shutdown(ssl);
   }
+  uv_poll_stop(watcher);
   close(state->fd);
   SSL_free(ssl);
-  uv_poll_stop(watcher);
 
   *(state->prev) = state->next;
   if (state->next) {
@@ -375,10 +375,13 @@ void connection_cb(uv_poll_t *watcher, int status, int events)
   // Read whatever data needs to be read (controlled by state->need)
 
   while (state->need > 0) {
-    int read;
+    int read = SSL_read(state->ssl, state->current, state->need);
 
-    read = SSL_read(state->ssl, state->current, state->need);
-    if (read <= 0) {
+	if (read == 0) {
+	  return;
+	}
+
+    if (read < 0) {
       int err = SSL_get_error(state->ssl, read);
       switch (err) {
 
@@ -565,7 +568,7 @@ void signal_cb(uv_signal_t *w, int signum)
 void child_signal_cb(uv_signal_t *w, int signum)
 {
   uv_signal_stop(w);
-  uv_stop(w->loop);
+  uv_poll_stop((uv_poll_t *)w->data);
 }
 
 // cleanup: cleanup state. This is a function because it is needed by
@@ -633,7 +636,6 @@ int main(int argc, char *argv[])
   glob_t g;
   int rc, privates_count, sock, i, t;
   struct sockaddr_in addr;
-  uv_loop_t *loop;
 
   const struct option long_options[] = {
     {"port",                  required_argument, 0, 0},
@@ -843,22 +845,25 @@ int main(int argc, char *argv[])
   for (i = 0; i < num_processes; i++) {
     int pid = fork();
     if (pid == 0) {
+
+	  // CHILD PROCESS
+
       uv_poll_t *server_watcher = (uv_poll_t *)malloc(sizeof(uv_poll_t));
 	  server_data *data = (server_data *)malloc(sizeof(server_data));
 	  data->ctx = ctx;
 	  data->fd = sock;
       server_watcher->data = (void *)data;
-      loop = uv_loop_new();
+	  uv_loop_t *loop = uv_loop_new();
       uv_poll_init(loop, server_watcher, sock);
       uv_poll_start(server_watcher, UV_READABLE, server_cb);
 
       uv_signal_t signal_watcher;
+	  signal_watcher.data = (void *)server_watcher;
       uv_signal_init(loop, &signal_watcher);
       uv_signal_start(&signal_watcher, child_signal_cb, SIGTERM);
 
       uv_run(loop, UV_RUN_DEFAULT);
 
-      uv_poll_stop(server_watcher);
       close(sock);
 	  free(data);
       free(server_watcher);
@@ -881,7 +886,7 @@ int main(int argc, char *argv[])
 
   close(sock);
 
-  loop = uv_loop_new();
+  uv_loop_t *loop = uv_loop_new();
 
   uv_signal_t sigterm_watcher;
   uv_signal_init(loop, &sigterm_watcher);
