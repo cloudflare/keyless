@@ -12,15 +12,16 @@
 
 #include "kssl.h"
 #include "kssl_helpers.h"
+#include "kssl_cli.h"
 
 #if PLATFORM_WINDOWS
 #include <winsock.h>
+#include <windows.h>
 #else
 #include <unistd.h>
 #include <sys/socket.h>
 #include <sys/wait.h>
 #include <netinet/ip.h>
-#include <glob.h>
 #include <getopt.h>
 #include <uv.h>
 #endif
@@ -774,13 +775,46 @@ int main(int argc, char *argv[])
   // files that end with .key and the part before the .key is taken to
   // be the DNS name.
 
-  g.gl_pathc  = 0;
-  g.gl_offs   = 0;
-
   const char *starkey = "/*.key";
   char *pattern = (char *)malloc(strlen(private_key_directory)+strlen(starkey)+1);
   strcpy(pattern, private_key_directory);
   strcat(pattern, starkey);
+
+#if WINDOWS
+  WIN32_FIND_DATA FindFileData;
+  HANDLE hFind;
+
+  hFind = FindFirstFile(starkey, &FindFileData);
+  if (hFind == INVALID_HANDLE_VALUE) {
+    SSL_CTX_free(ctx);
+    fatal_error("Error %d finding private keys in %s", rc, private_key_directory);
+  }
+
+  // count the number of files
+  privates_count = 1;
+  while (FindNextFile(hFind, &FindFileData) != 0) {
+    privates_count++;
+  }
+  FindClose(hFile);
+
+  privates = new_pk_list(privates_count);
+  if (privates == NULL) {
+    SSL_CTX_free(ctx);
+    fatal_error("Failed to allocate room for private keys");
+  }
+
+  hFind = FindFirstFile(starkey, &FindFileData);
+  for (i = 0; i < privates_count; ++i) {
+    if (add_key_from_file(FindFileData.cFileName, privates) != 0) {
+      SSL_CTX_free(ctx);
+      fatal_error("Failed to add private keys");
+    }
+    FindNextFile(hFind, &FindFileData);
+  }
+  FindClose(hFile);
+#else
+  g.gl_pathc  = 0;
+  g.gl_offs   = 0;
 
   rc = glob(pattern, GLOB_NOSORT, 0, &g);
 
@@ -812,6 +846,8 @@ int main(int argc, char *argv[])
 
   free(pattern);
   globfree(&g);
+#endif
+
 
   sock = socket(AF_INET, SOCK_STREAM, 0);
   if (sock == -1) {

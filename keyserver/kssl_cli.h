@@ -244,4 +244,3 @@ int gettimeofday(struct timeval *tv, struct timezone *tz)
 
 #endif  /* __GNUC__ */
 
-
