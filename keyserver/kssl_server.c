@@ -646,10 +646,12 @@ int main(int argc, char *argv[])
 #if PLATFORM_WINDOWS
   WIN32_FIND_DATA FindFileData;
   HANDLE hFind;
+  const char *starkey = "\\*.key";
 #else
   glob_t g;
-#endif
   const char *starkey = "/*.key";
+#endif
+
   char *pattern;
   int rc, privates_count, sock, i, t;
   struct sockaddr_in addr;
