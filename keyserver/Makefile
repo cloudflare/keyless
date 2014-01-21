@@ -9,11 +9,11 @@ REVISION  := $(shell git log -n1 --pretty=format:%h)
 
 # Turn on absolutely all warnings and turn them into errors
 
-CFLAGS += -g -Wall -Wextra -Wno-unused-parameter -Werror
+CFLAGS += -g -Wall -Wextra -Wno-unused-parameter -Werror -I.
 
 # Link against OpenSSL and libev
 
-LDLIBS := -lcrypto -lssl -lev
+LDLIBS := -lcrypto -lssl -lev -L.
 
 # This Makefile makes use of the GNU Make Standard Library project
 # which can be found at http://gmsl.sf.net/
