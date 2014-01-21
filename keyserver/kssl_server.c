@@ -14,6 +14,7 @@
 #include <sys/wait.h>
 #include <netinet/ip.h>
 #include <getopt.h>
+#include <glob.h>
 #endif
 #include <fcntl.h>
 #include <uv.h>
