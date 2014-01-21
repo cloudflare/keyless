@@ -68,10 +68,10 @@ void log_err_error()
   ERR_clear_error();
 }
 
-// This defines the maximum number of processes to fork
+// This defines the maximum number of workers to create
 
-#define DEFAULT_PROCESSES 1
-#define MAX_PROCESSES 32
+#define DEFAULT_WORKERS 1
+#define MAX_WORKERS 32
 
 // This is the state of an individual SSL connection and is used for buffering
 // of data received by SSL_read
@@ -316,6 +316,7 @@ kssl_error_code write_queued_messages(connection_state *state) {
         return KSSL_ERROR_INTERNAL;
 
       default:
+		fprintf(stderr, "SSL_write: %d/%d\n", rc, SSL_get_error(ssl, rc));
         log_ssl_error(ssl, rc);
         return KSSL_ERROR_INTERNAL;
       }
@@ -548,14 +549,14 @@ void server_cb(uv_poll_t *watcher, int status, int events)
   uv_poll_start(ssl_watcher, UV_READABLE | UV_WRITABLE, connection_cb);
 }
 
-int num_processes = DEFAULT_PROCESSES;
-pid_t pids[MAX_PROCESSES];
+int num_workers = DEFAULT_WORKERS;
+pid_t pids[MAX_WORKERS];
 
 // signal_cb: handle SIGTERM and terminates program cleanly
 void signal_cb(uv_signal_t *w, int signum)
 {
   int i;
-  for (i = 0; i < num_processes; i++) {
+  for (i = 0; i < num_workers; i++) {
     if (pids[i] != 0) {
       uv_kill(pids[i], SIGTERM);
     }
@@ -600,7 +601,7 @@ void child_cb(uv_signal_t *w, int signum)
   // kill this child on exit since it has already exited.
 
   int i;
-  for (i = 0; i < num_processes; i++) {
+  for (i = 0; i < num_workers; i++) {
 	if (pids[i] != 0) {
 	  int status;
 	  if (waitpid(pids[i], &status, WNOHANG) == pids[i]) {
@@ -609,10 +610,10 @@ void child_cb(uv_signal_t *w, int signum)
     }
   }
 
-  // If there are no more child processes we are no longer interested
+  // If there are no more child workers we are no longer interested
   // in SIGCHLD
 
-  for (i = 0; i < num_processes; i++) {
+  for (i = 0; i < num_workers; i++) {
 	if (pids[i] != 0) {
 	  return;
 	}
@@ -646,7 +647,7 @@ int main(int argc, char *argv[])
     {"ca-file",               required_argument, 0, 5},
     {"silent",                no_argument,       0, 6},
     {"pid-file",              required_argument, 0, 7},
-    {"num-processes",         optional_argument, 0, 8}
+    {"num-workers",         optional_argument, 0, 8}
   };
 
   while (1) {
@@ -695,7 +696,7 @@ int main(int argc, char *argv[])
       break;
 
     case 8:
-      num_processes = atoi(optarg);
+      num_workers = atoi(optarg);
       break;
     }
   }
@@ -715,8 +716,8 @@ int main(int argc, char *argv[])
   if (!cipher_list) {
     fatal_error("The --cipher-list parameter must be specified with a list of acceptable ciphers");
   }
-  if (num_processes <= 0 || num_processes > MAX_PROCESSES) {
-    fatal_error("The --num-processes parameter must between 1 and %d", MAX_PROCESSES);
+  if (num_workers <= 0 || num_workers > MAX_WORKERS) {
+    fatal_error("The --num-workers parameter must between 1 and %d", MAX_WORKERS);
   }
 
   SSL_library_init();
@@ -877,7 +878,7 @@ int main(int argc, char *argv[])
     fatal_error("Failed to listen on TCP socket");
   }
 
-  for (i = 0; i < num_processes; i++) {
+  for (i = 0; i < num_workers; i++) {
     int pid = fork();
     if (pid == 0) {
 
