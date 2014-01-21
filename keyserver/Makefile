@@ -11,9 +11,9 @@ REVISION  := $(shell git log -n1 --pretty=format:%h)
 
 CFLAGS += -g -Wall -Wextra -Wno-unused-parameter -Werror
 
-# Link against OpenSSL and libev
+# Link against OpenSSL and libuv
 
-LDLIBS := -lcrypto -lssl -lev
+LDLIBS := -lcrypto -lssl -luv
 
 # This Makefile makes use of the GNU Make Standard Library project
 # which can be found at http://gmsl.sf.net/
@@ -104,6 +104,7 @@ kill:
 	@kill $(PID)
 	@rm -f $(PID_FILE)
 else
+run: export LD_LIBRARY_PATH=/usr/local/lib
 run: all $(call marker,$(TMP))
 ifeq ($(VALGRIND),1)
 	@rm -f $(VALGRIND_LOG)
