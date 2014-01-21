@@ -602,10 +602,20 @@ void child_cb(uv_signal_t *w, int signum)
 	  int status;
 	  if (waitpid(pids[i], &status, WNOHANG) == pids[i]) {
 		pids[i] = 0;
-		break;
 	  }
     }
   }
+
+  // If there are no more child processes we are no longer interested
+  // in SIGCHLD
+
+  for (i = 0; i < num_processes; i++) {
+	if (pids[i] != 0) {
+	  return;
+	}
+  }
+
+  uv_signal_stop(w);
 }
 
 int main(int argc, char *argv[])
