@@ -19,6 +19,7 @@
 #include <fcntl.h>
 #include <uv.h>
 
+#include <openssl/bio.h>
 #include <openssl/ssl.h>
 #include <openssl/err.h>
 #include <openssl/conf.h>
@@ -130,10 +131,20 @@ typedef struct _connection_state {
   int qr;
   int qw;
 
-  // Back link just used when cleaning up. This points to the watcher
-  // that points to this connection_state through its data pointer
+  // Back link just used when cleaning up. This points to the TCP
+  // connection that points to this connection_state through its data
+  // pointer
 
-  uv_poll_t *watcher;
+  uv_tcp_t *tcp;
+
+  // Pointers to the memory BIO used for communication with OpenSSL
+
+  BIO *read_bio;
+  BIO *write_bio;
+
+  // Set to true when the TLS connection is set up
+
+  int connected;
 } connection_state;
 
 // Linked list of active connections
@@ -161,6 +172,7 @@ void initialize_state(connection_state *state)
   state->qr = 0;
   state->qw = 0;
   state->fd = 0;
+  state->connected = 0;
 }
 
 // queue_write: adds a buffer of dynamically allocated memory to the
@@ -251,32 +263,41 @@ void free_read_state(connection_state *state)
   state->current = 0;
 }
 
-// watcher_terminate: terminate an SSL connection and remove from event
-// loop. Clean up any allocated memory.
-void watcher_terminate(uv_poll_t *watcher) {
-  connection_state *state = (connection_state *)watcher->data;
+// close_cb: called when a TCP connection has been closed
+void close_cb(uv_handle_t *h)
+{
+}
+
+// connection_terminate: terminate an SSL connection and remove from
+// event loop. Clean up any allocated memory.
+void connection_terminate(uv_tcp_t *tcp)
+{
+  connection_state *state = (connection_state *)tcp->data;
   SSL *ssl = state->ssl;
 
   int rc = SSL_shutdown(ssl);
   if (rc == 0) {
     SSL_shutdown(ssl);
   }
-  uv_poll_stop(watcher);
-  SOCKET_CLOSE(state->fd);
+  uv_read_stop((uv_stream_t *)tcp);
+  uv_close((uv_handle_t *)tcp, close_cb);
   SSL_free(ssl);
+  BIO_free_all(state->read_bio);
+  BIO_free_all(state->write_bio);
 
   *(state->prev) = state->next;
   if (state->next) {
     state->next->prev = state->prev;
   }
 
-  free(watcher);
+  free(tcp);
   free_read_state(state);
   free(state);
 }
 
 // write_queued_message: write all messages in the queue onto the wire
-kssl_error_code write_queued_messages(connection_state *state) {
+kssl_error_code write_queued_messages(connection_state *state)
+{
   SSL *ssl = state->ssl;
   int rc;
   while ((state->qr != state->qw) && (state->q[state->qr].len > 0)) {
@@ -301,8 +322,7 @@ kssl_error_code write_queued_messages(connection_state *state) {
       switch (SSL_get_error(ssl, rc)) {
 
         // If either occurs then OpenSSL documentation states that the
-        // SSL_write must be retried which will happen on the next
-        // UV_WRITABLE
+        // SSL_write must be retried which will happen next time
 
       case SSL_ERROR_WANT_READ:
       case SSL_ERROR_WANT_WRITE:
@@ -333,7 +353,8 @@ kssl_error_code write_queued_messages(connection_state *state) {
 
 // clear_read_queue: a message of unknown version was sent, so ignore
 // the rest of the message
-void clear_read_queue(connection_state *state) {
+void clear_read_queue(connection_state *state)
+{
   SSL *ssl = state->ssl;
   int read = 0;
   BYTE ignore[1024];
@@ -343,35 +364,52 @@ void clear_read_queue(connection_state *state) {
   } while (read > 0);
 }
 
-// connection_cb: called when a client SSL connection has data to read
-// or is ready to write
-void connection_cb(uv_poll_t *watcher, int status, int events)
+// wrote_cb: called when a socket wrote has succeeded
+void wrote_cb(uv_write_t* req, int status)
 {
-  kssl_error_code err;
-  BYTE *response = NULL;
-  int response_len = 0;
+  if (req) {
+	free(req);
+  }
+}
 
-  connection_state *state = (connection_state *)watcher->data;
+// flush_write: flushes data in the write BIO to the network
+// connection. Returns 1 if successful, 0 on error
+int flush_write(connection_state *state)
+{
+#define BUF_SIZE 1024
+  char b[BUF_SIZE];
+  int n;
 
-  // If the connection is writeable and there is data to write then
-  // get on and write it
+  while ((n = BIO_read(state->write_bio, &b[0], BUF_SIZE)) > 0) {
+	uv_write_t *req = (uv_write_t *)malloc(sizeof(uv_write_t));
+	uv_buf_t buf = uv_buf_init(&b[0], n);
 
-  if (events & UV_WRITABLE) {
-    err = write_queued_messages(state);
-    if (err != KSSL_ERROR_NONE) {
-      if (err == KSSL_ERROR_INTERNAL) {
-        watcher_terminate(watcher);
-      }
-      return;
-    }
+	int rc = uv_write(req, (uv_stream_t*)state->tcp, &buf, 1, wrote_cb);
+	if (rc < 0) {
+	  return 0;
+	}
   }
 
-  // If the socket is not readable then we're done. The rest of the
-  // function is to do with reading kssl_headers and handling
-  // requests.
+  return 1;
+}
 
-  if (!(events & UV_READABLE)) {
-    return;
+// do_ssl: process pending data from OpenSSL and send any data that's
+// waiting. Returns 1 if ok, 0 if the connection should be terminated
+int do_ssl(connection_state *state)
+{
+
+  // First determine whether the SSL_accept has completed. If not then any
+  // data on the TCP connection is related to the handshake and is not
+  // application data.
+
+  if (!state->connected) {
+	if (!SSL_is_init_finished(state->ssl)) {
+	  if (SSL_do_handshake(state->ssl) != 1) {
+		return 1;
+	  }
+	}
+
+	state->connected = 1;
   }
 
   // Read whatever data needs to be read (controlled by state->need)
@@ -380,7 +418,7 @@ void connection_cb(uv_poll_t *watcher, int status, int events)
     int read = SSL_read(state->ssl, state->current, state->need);
 
 	if (read == 0) {
-	  return;
+	  return 1;
 	}
 
     if (read < 0) {
@@ -397,24 +435,20 @@ void connection_cb(uv_poll_t *watcher, int status, int events)
       case SSL_ERROR_WANT_READ:
       case SSL_ERROR_WANT_WRITE:
         ERR_clear_error();
-        break;
+        return 1;
 
         // Connection termination
 
       case SSL_ERROR_ZERO_RETURN:
         ERR_clear_error();
-        watcher_terminate(watcher);
-        break;
+		return 0;
 
         // Something went wrong so give up on connetion
 
       default:
         log_ssl_error(state->ssl, read);
-        watcher_terminate(watcher);
-        break;
+		return 0;
       }
-
-      return;
     }
 
     // Read some number of bytes into the state->current buffer so move that
@@ -437,12 +471,9 @@ void connection_cb(uv_poll_t *watcher, int status, int events)
     // processed.
 
     if (state->state == CONNECTION_STATE_GET_HEADER) {
-      err = parse_header(state->wire_header, &state->header);
+      kssl_error_code err = parse_header(state->wire_header, &state->header);
       if (err != KSSL_ERROR_NONE) {
-        if (err == KSSL_ERROR_INTERNAL) {
-          watcher_terminate(watcher);
-        }
-        return;
+        return 0;
       }
 
       state->start = 0;
@@ -453,7 +484,7 @@ void connection_cb(uv_poll_t *watcher, int status, int events)
         clear_read_queue(state);
         free_read_state(state);
         set_get_header_state(state);
-        return;
+        return 1;
       }
 
       // If the header indicates that a payload is coming then read it
@@ -476,13 +507,15 @@ void connection_cb(uv_poll_t *watcher, int status, int events)
       write_log("Connection in unknown state %d", state->state);
       free_read_state(state);
       set_get_header_state(state);
-      return;
+      return 1;
     }
 
     // When we reach here state->header is valid and filled in and if
     // necessary state->start points to the payload.
 
-    err = kssl_operate(&state->header, state->start, privates, &response, &response_len);
+	BYTE *response = NULL;
+	int response_len = 0;
+	kssl_error_code err = kssl_operate(&state->header, state->start, privates, &response, &response_len);
     if (err != KSSL_ERROR_NONE) {
       log_err_error();
     } else  {
@@ -497,89 +530,120 @@ void connection_cb(uv_poll_t *watcher, int status, int events)
     free_read_state(state);
     set_get_header_state(state);
 
-    return;
+    return 1;
+  }
+
+  return 1;
+}
+
+// read_cb: a TCP connection is readable so read the bytes that are on
+// it and pass them to OpenSSL
+void read_cb(uv_stream_t *s, ssize_t nread, const uv_buf_t *buf)
+{
+  connection_state *state = (connection_state *)s->data;
+
+  if (nread > 0) {
+
+	// If there's data to read then pass it to OpenSSL via the BIO
+
+	// TODO: check return value
+	BIO_write(state->read_bio, buf->base, nread);
+  }
+
+  if (nread == -1) {
+	connection_terminate(state->tcp);
+  } else {
+	if (do_ssl(state)) {
+	  write_queued_messages(state);
+	  flush_write(state);
+	} else {
+	  connection_terminate(state->tcp);
+	}
+  }
+
+  // Buffer was previously allocated by us in a call to
+  // allocate_cb. libuv will not reuse so we must free.
+
+  if (buf && buf->base) {
+	free(buf->base);
   }
 }
 
-// Used to store data needed by the server_cb
-typedef struct _server_data {
-  SSL_CTX *ctx;  // OpenSSL context
-  int fd;        // File descriptor of underlying file
-} server_data;
-
-// server_cb: gets called when the listen socket for the server is
-// ready to read (i.e. there's an incoming connection).
-void server_cb(uv_poll_t *watcher, int status, int events)
+// allocate_cb: libuv needs buffer space so allocate it. We are
+// responsible for freeing this buffer.
+void allocate_cb(uv_handle_t *h, size_t s, uv_buf_t *buf)
 {
-  server_data *data;
-  int client;
-  SSL_CTX *ctx;
-  SSL *ssl;
-  int rc, flags;
-  uv_poll_t *ssl_watcher;
-  connection_state *state;
+  buf->base = (char *)malloc(s);
 
-  data = (server_data *)watcher->data;
-  client = accept(data->fd, 0, 0);
-  
-  if (client == -1) {
-    return;
+  if (buf->base) {
+	buf->len = s;
+  } else {
+	buf->len = 0;
+  }
+}
+
+// new_connection_cb: gets called when the listen socket for the
+// server is ready to read (i.e. there's an incoming connection).
+void new_connection_cb(uv_stream_t *server, int status)
+{
+  if (status == -1) {
+	// TODO: should we log this?
+	return;
   }
 
-  ctx = data->ctx;
-  ssl = SSL_new(ctx);
+  SSL_CTX *ctx = (SSL_CTX *)server->data;
+  SSL *ssl = SSL_new(ctx);
   if (!ssl) {
-    write_log("Failed to create SSL context for fd %d", client);
-    SOCKET_CLOSE(client);
+    write_log("Failed to create SSL context");
     return;
   }
 
-  SSL_set_fd(ssl, client);
-
-  rc = SSL_accept(ssl);
-  if (rc != 1) {
-    log_ssl_error(ssl, rc);
-    SOCKET_CLOSE(client);
-    SSL_free(ssl);
-    return;
+  uv_tcp_t *client = (uv_tcp_t *)malloc(sizeof(uv_tcp_t));
+  uv_tcp_init(server->loop, client);
+  if (uv_accept(server, (uv_stream_t *)client) != 0) {
+	uv_close((uv_handle_t *)client, close_cb);
+	write_log("Failed to accept TCP connection");
+	return;
   }
 
-  flags = fcntl(client, F_GETFL, 0);
-  flags |= O_NONBLOCK;
-  fcntl(client, F_SETFL, flags);
-
-  ssl_watcher = (uv_poll_t *)malloc(sizeof(uv_poll_t));
-  state = (connection_state *)malloc(sizeof(connection_state));
+  connection_state *state = (connection_state *)malloc(sizeof(connection_state));
   initialize_state(state);
-  state->watcher = ssl_watcher;
+  state->tcp = client;
   set_get_header_state(state);
   state->ssl = ssl;
-  ssl_watcher->data = (void *)state;
-  uv_poll_init(watcher->loop, ssl_watcher, client);
-  uv_poll_start(ssl_watcher, UV_READABLE | UV_WRITABLE, connection_cb);
+
+  // Set up OpenSSL to use a memory BIO. We'll read and write from this BIO
+  // when the TCP connection has data or is writeable. The BIOs are set to
+  // non-blocking mode.
+
+  state->read_bio = BIO_new(BIO_s_mem());
+  BIO_set_nbio(state->read_bio, 1);
+  state->write_bio = BIO_new(BIO_s_mem());
+  BIO_set_nbio(state->write_bio, 1);
+  SSL_set_bio(ssl, state->read_bio, state->write_bio);
+
+  client->data = (void *)state;
+
+  uv_read_start((uv_stream_t*)client, allocate_cb, read_cb);
+
+  // Start accepting the TLS connection. This will likely not
+  // complete here and will be completed in the read_cb/do_ssl above.
+
+  SSL_set_accept_state(ssl);
+  SSL_do_handshake(ssl);
 }
 
 int num_workers = DEFAULT_WORKERS;
-pid_t pids[MAX_WORKERS];
 
-// signal_cb: handle SIGTERM and terminates program cleanly
-void signal_cb(uv_signal_t *w, int signum)
-{
-  int i;
-  for (i = 0; i < num_workers; i++) {
-    if (pids[i] != 0) {
-      uv_kill(pids[i], SIGTERM);
-    }
-  }
+// This is the TCP connection on which we listen for TLS connections
 
-  uv_signal_stop(w);
-}
+uv_tcp_t tcp_server;
 
-// child_signal_cb: handle SIGTERM and terminate a child
-void child_signal_cb(uv_signal_t *w, int signum)
+// sigterm_cb: handle SIGTERM and terminates program cleanly
+void sigterm_cb(uv_signal_t *w, int signum)
 {
   uv_signal_stop(w);
-  uv_poll_stop((uv_poll_t *)w->data);
+  uv_close((uv_handle_t *)&tcp_server, 0);
 }
 
 // cleanup: cleanup state. This is a function because it is needed by
@@ -603,35 +667,6 @@ void cleanup(uv_loop_t *loop, SSL_CTX *ctx, pk_list privates)
   ERR_free_strings();
 }
 
-// child_cb: when a child has terminated stop receiving events for it.
-void child_cb(uv_signal_t *w, int signum)
-{
-
-  // This means that the parent signal_cb will not bother trying to
-  // kill this child on exit since it has already exited.
-
-  int i;
-  for (i = 0; i < num_workers; i++) {
-	if (pids[i] != 0) {
-	  int status;
-	  if (waitpid(pids[i], &status, WNOHANG) == pids[i]) {
-		pids[i] = 0;
-	  }
-    }
-  }
-
-  // If there are no more child workers we are no longer interested
-  // in SIGCHLD
-
-  for (i = 0; i < num_workers; i++) {
-	if (pids[i] != 0) {
-	  return;
-	}
-  }
-
-  uv_signal_stop(w);
-}
-
 int main(int argc, char *argv[])
 {
   int port = -1;
@@ -650,16 +685,15 @@ int main(int argc, char *argv[])
   const char *starkey = "\\*.key";
 #else
   glob_t g;
+  char *pattern;
   const char *starkey = "/*.key";
 #endif
 
-  char *pattern;
-  int rc, privates_count, sock, i, t;
+  int rc, privates_count, i;
   struct sockaddr_in addr;
   STACK_OF(X509_NAME) *cert_names;
   uv_loop_t *loop;
   uv_signal_t sigterm_watcher;
-  uv_signal_t sigchld_watcher;
 
   const struct option long_options[] = {
     {"port",                  required_argument, 0, 0},
@@ -745,6 +779,7 @@ int main(int argc, char *argv[])
 
   SSL_library_init();
   SSL_load_error_strings();
+  ERR_load_BIO_strings();
 
   method = TLSv1_2_server_method();
   ctx = SSL_CTX_new(method);
@@ -867,88 +902,35 @@ int main(int argc, char *argv[])
   globfree(&g);
 #endif
 
-  sock = socket(AF_INET, SOCK_STREAM, 0);
-  if (sock == -1) {
-    SSL_CTX_free(ctx);
-    fatal_error("Can't create TCP socket");
-  }
+  // TODO: port this to libuv
+  //
+  //  if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &t, sizeof(int)) == -1) {
+  //  SSL_CTX_free(ctx);
+  //  fatal_error("Failed to set socket option SO_REUSERADDR");
+  // }
 
-  t = 1;
-  if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &t, sizeof(int)) == -1) {
-    SSL_CTX_free(ctx);
-    fatal_error("Failed to set socket option SO_REUSERADDR");
-  }
+  loop = uv_loop_new();
+  uv_tcp_init(loop, &tcp_server);
 
   addr.sin_family = AF_INET;
   addr.sin_port = htons(port);
   addr.sin_addr.s_addr = INADDR_ANY;
   bzero(&(addr.sin_zero), 8);
 
-  if (bind(sock, (struct sockaddr *)&addr, sizeof(struct sockaddr)) == -1) {
+  if (uv_tcp_bind(&tcp_server, (const struct sockaddr*)&addr, 0) != 0) {
     SSL_CTX_free(ctx);
-    SOCKET_CLOSE(sock);
     fatal_error("Can't bind to port %d", port);
   }
 
-  if (listen(sock, SOMAXCONN) == -1) {
+  tcp_server.data = (char *)ctx;
+
+  if (uv_listen((uv_stream_t *)&tcp_server, SOMAXCONN, new_connection_cb) != 0) {
     SSL_CTX_free(ctx);
-    SOCKET_CLOSE(sock);
     fatal_error("Failed to listen on TCP socket");
   }
 
-  for (i = 0; i < num_workers; i++) {
-    int pid = fork();
-    if (pid == 0) {
-      connection_state *f;
-      uv_signal_t signal_watcher;
-	  uv_poll_t *server_watcher;
-	  server_data *data;
-	  uv_loop_t *loop;
-	  // CHILD PROCESS
-
-      server_watcher = (uv_poll_t *)malloc(sizeof(uv_poll_t));
-	  data = (server_data *)malloc(sizeof(server_data));
-	  data->ctx = ctx;
-	  data->fd = sock;
-      server_watcher->data = (void *)data;
-	  loop = uv_loop_new();
-      uv_poll_init(loop, server_watcher, sock);
-      uv_poll_start(server_watcher, UV_READABLE, server_cb);
-
-	  signal_watcher.data = (void *)server_watcher;
-      uv_signal_init(loop, &signal_watcher);
-      uv_signal_start(&signal_watcher, child_signal_cb, SIGTERM);
-
-      uv_run(loop, UV_RUN_DEFAULT);
-
-      SOCKET_CLOSE(sock);
-	  free(data);
-      free(server_watcher);
-
-      f = active;
-      while (f) {
-        connection_state *n = f->next;
-        watcher_terminate(f->watcher);
-        f = n;
-      }
-
-      cleanup(loop, ctx, privates);
-      exit(0);
-    } else {
-      pids[i] = pid;
-    }
-  }
-
-  // PARENT PROCESS
-
-  SOCKET_CLOSE(sock);
-
-  loop = uv_loop_new();
   uv_signal_init(loop, &sigterm_watcher);
-  uv_signal_start(&sigterm_watcher, signal_cb, SIGTERM);
-
-  uv_signal_init(loop, &sigchld_watcher);
-  uv_signal_start(&sigchld_watcher, child_cb, SIGCHLD);
+  uv_signal_start(&sigterm_watcher, sigterm_cb, SIGTERM);
 
   if (pid_file) {
     FILE *fp = fopen(pid_file, "w");
@@ -957,7 +939,6 @@ int main(int argc, char *argv[])
       fclose(fp);
     } else {
       SSL_CTX_free(ctx);
-      SOCKET_CLOSE(sock);
       fatal_error("Can't write to pid file %s", pid_file);
     }
     free(pid_file);
