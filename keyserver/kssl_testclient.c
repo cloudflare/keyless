@@ -2,15 +2,6 @@
 //
 // Copyright (c) 2013 CloudFlare, Inc.
 
-#include <ctype.h>
-
-#include <openssl/evp.h>
-#include <openssl/ssl.h>
-#include <openssl/err.h>
-
-#include <sys/types.h>
-#include <stdarg.h>
-
 #include "kssl.h"
 #include "kssl_helpers.h"
 
@@ -23,13 +14,22 @@
 #include <netinet/ip.h>
 #include <pthread.h>
 #include <sys/wait.h>
-#include <getopt.h>
 #include <sys/types.h>
-#include <sys/wait.h>
 #endif
+
+#include <ctype.h>
+
+#include <openssl/evp.h>
+#include <openssl/ssl.h>
+#include <openssl/err.h>
+
+#include <sys/types.h>
+#include <stdarg.h>
+#include "kssl_cli.h"
 
 unsigned char ipv6[16] = {0x0, 0xf2, 0x13, 0x48, 0x43, 0x01};
 unsigned char ipv4[4] = {127, 0, 0, 1};
+
 
 // ssl_error: call when a fatal SSL error occurs. Exits the program
 // with return code 1.
@@ -90,6 +90,7 @@ void test(const char *fmt, ...)
   vfprintf(stderr, fmt, l);
   va_end(l);
 }
+
 
 int tests = 0;
 
@@ -766,7 +767,7 @@ connection *ssl_connect(SSL_CTX *ctx, int port)
 void ssl_disconnect(connection *c)
 {
   SSL_shutdown(c->ssl);
-  close(c->fd);
+  SOCKET_CLOSE(c->fd);
   SSL_free(c->ssl);
   free(c);
 }
@@ -845,6 +846,7 @@ int main(int argc, char *argv[])
   SSL_CTX *ctx;
   connection *c0, *c1, *c2, *c3, *c;
   int i, j, k;
+  int opt;
   struct timeval stop, start;
   int algs[ALGS_COUNT] = {KSSL_OP_RSA_SIGN_MD5SHA1, KSSL_OP_RSA_SIGN_SHA1, KSSL_OP_RSA_SIGN_SHA224,
                           KSSL_OP_RSA_SIGN_SHA256, KSSL_OP_RSA_SIGN_SHA384, KSSL_OP_RSA_SIGN_SHA512};
@@ -859,12 +861,12 @@ int main(int argc, char *argv[])
   };
 
   while (1) {
-    int c = getopt_long(argc, argv, "", long_options, 0);
-    if (c == -1) {
+    opt = getopt_long(argc, argv, "", long_options, 0);
+    if (opt == -1) {
       break;
     }
 
-    switch (c) {
+    switch (opt) {
     case 0:
       port = atoi(optarg);
       break;
@@ -968,7 +970,7 @@ int main(int argc, char *argv[])
   ssl_disconnect(c0);
 
   c0 = ssl_connect(ctx, port);
-  //kssl_op_ping_bad_version(c0);
+  kssl_op_ping_bad_version(c0);
   ssl_disconnect(c0);
 
   c0 = ssl_connect(ctx, port);
@@ -1125,7 +1127,7 @@ int main(int argc, char *argv[])
         (stop.tv_usec - start.tv_usec) / 1000);
   }
 #endif // THREADED_TEST
-
+#if !PLATFORM_WINDOWS
   // Test requests over multiple processes
   {
     int forks[8] = {1, 2, 4, 8, 16, 32, 64, 128};
@@ -1157,6 +1159,7 @@ int main(int argc, char *argv[])
       }
     }
   }
+#endif // PLATFORM_WINDOWS
 
   goto skip;
 

@@ -25,3 +25,4 @@ kssl_error_code kssl_error(
     int        *response_len);  // length of response
 
 #endif // INCLUDED_KSSL_CORE
+

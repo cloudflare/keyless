@@ -9,11 +9,11 @@ REVISION  := $(shell git log -n1 --pretty=format:%h)
 
 # Turn on absolutely all warnings and turn them into errors
 
-CFLAGS += -g -Wall -Wextra -Wno-unused-parameter -Werror
+CFLAGS += -g -Wall -Wextra -Wno-unused-parameter -Werror -I.
 
 # Link against OpenSSL and libuv
 
-LDLIBS := -lcrypto -lssl -luv
+LDLIBS := -lcrypto -lssl -luv -L.
 
 # This Makefile makes use of the GNU Make Standard Library project
 # which can be found at http://gmsl.sf.net/
@@ -109,7 +109,7 @@ run: all $(call marker,$(TMP))
 ifeq ($(VALGRIND),1)
 	@rm -f $(VALGRIND_LOG)
 endif
-	@$(VALGRIND_COMMAND)$(OBJ)kssl_server --port=$(PORT) --server-cert=server-cert/cert.pem --server-key=server-cert/key.pem --private-key-directory=keys --cipher-list=ECDHE-RSA-AES128-SHA256:AES128-GCM-SHA256:RC4:HIGH:!MD5:!aNULL:!EDH --ca-file=$(CA_FILE) --pid-file=$(PID_FILE) --num-processes=4 --silent &
+	@$(VALGRIND_COMMAND)$(OBJ)kssl_server --port=$(PORT) --server-cert=server-cert/cert.pem --server-key=server-cert/key.pem --private-key-directory=keys --cipher-list=ECDHE-RSA-AES128-SHA256:AES128-GCM-SHA256:RC4:HIGH:!MD5:!aNULL:!EDH --ca-file=$(CA_FILE) --pid-file=$(PID_FILE) --num-workers=4 --silent &
 ifeq ($(VALGRIND),1)
 	@echo $$! > $(PID_FILE)
 endif

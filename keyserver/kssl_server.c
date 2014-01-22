@@ -3,13 +3,6 @@
 //
 // Copyright (c) 2013 CloudFlare, Inc.
 
-#include <openssl/ssl.h>
-#include <openssl/err.h>
-#include <openssl/conf.h>
-#include <openssl/engine.h>
-
-#include <stdarg.h>
-
 #include "kssl.h"
 #include "kssl_helpers.h"
 
@@ -20,14 +13,22 @@
 #include <sys/socket.h>
 #include <sys/wait.h>
 #include <netinet/ip.h>
-#include <glob.h>
 #include <getopt.h>
-#include <uv.h>
+#include <glob.h>
 #endif
 #include <fcntl.h>
+#include <uv.h>
+
+#include <openssl/ssl.h>
+#include <openssl/err.h>
+#include <openssl/conf.h>
+#include <openssl/engine.h>
+
+#include <stdarg.h>
+
+#include "kssl_cli.h"
 
 #include "kssl_log.h"
-
 #include "kssl_private_key.h"
 #include "kssl_core.h"
 
@@ -68,10 +69,10 @@ void log_err_error()
   ERR_clear_error();
 }
 
-// This defines the maximum number of processes to fork
+// This defines the maximum number of workers to create
 
-#define DEFAULT_PROCESSES 1
-#define MAX_PROCESSES 32
+#define DEFAULT_WORKERS 1
+#define MAX_WORKERS 32
 
 // This is the state of an individual SSL connection and is used for buffering
 // of data received by SSL_read
@@ -261,7 +262,7 @@ void watcher_terminate(uv_poll_t *watcher) {
     SSL_shutdown(ssl);
   }
   uv_poll_stop(watcher);
-  close(state->fd);
+  SOCKET_CLOSE(state->fd);
   SSL_free(ssl);
 
   *(state->prev) = state->next;
@@ -316,6 +317,7 @@ kssl_error_code write_queued_messages(connection_state *state) {
         return KSSL_ERROR_INTERNAL;
 
       default:
+		fprintf(stderr, "SSL_write: %d/%d\n", rc, SSL_get_error(ssl, rc));
         log_ssl_error(ssl, rc);
         return KSSL_ERROR_INTERNAL;
       }
@@ -509,36 +511,45 @@ typedef struct _server_data {
 // ready to read (i.e. there's an incoming connection).
 void server_cb(uv_poll_t *watcher, int status, int events)
 {
-  server_data *data = (server_data *)watcher->data;
-  int client = accept(data->fd, 0, 0);
+  server_data *data;
+  int client;
+  SSL_CTX *ctx;
+  SSL *ssl;
+  int rc, flags;
+  uv_poll_t *ssl_watcher;
+  connection_state *state;
+
+  data = (server_data *)watcher->data;
+  client = accept(data->fd, 0, 0);
+  
   if (client == -1) {
     return;
   }
 
-  SSL_CTX *ctx = data->ctx;
-  SSL *ssl = SSL_new(ctx);
+  ctx = data->ctx;
+  ssl = SSL_new(ctx);
   if (!ssl) {
     write_log("Failed to create SSL context for fd %d", client);
-    close(client);
+    SOCKET_CLOSE(client);
     return;
   }
 
   SSL_set_fd(ssl, client);
 
-  int rc = SSL_accept(ssl);
+  rc = SSL_accept(ssl);
   if (rc != 1) {
     log_ssl_error(ssl, rc);
-    close(client);
+    SOCKET_CLOSE(client);
     SSL_free(ssl);
     return;
   }
 
-  int flags = fcntl(client, F_GETFL, 0);
+  flags = fcntl(client, F_GETFL, 0);
   flags |= O_NONBLOCK;
   fcntl(client, F_SETFL, flags);
 
-  uv_poll_t *ssl_watcher = (uv_poll_t *)malloc(sizeof(uv_poll_t));
-  connection_state *state = (connection_state *)malloc(sizeof(connection_state));
+  ssl_watcher = (uv_poll_t *)malloc(sizeof(uv_poll_t));
+  state = (connection_state *)malloc(sizeof(connection_state));
   initialize_state(state);
   state->watcher = ssl_watcher;
   set_get_header_state(state);
@@ -548,14 +559,14 @@ void server_cb(uv_poll_t *watcher, int status, int events)
   uv_poll_start(ssl_watcher, UV_READABLE | UV_WRITABLE, connection_cb);
 }
 
-int num_processes = DEFAULT_PROCESSES;
-pid_t pids[MAX_PROCESSES];
+int num_workers = DEFAULT_WORKERS;
+pid_t pids[MAX_WORKERS];
 
 // signal_cb: handle SIGTERM and terminates program cleanly
 void signal_cb(uv_signal_t *w, int signum)
 {
   int i;
-  for (i = 0; i < num_processes; i++) {
+  for (i = 0; i < num_workers; i++) {
     if (pids[i] != 0) {
       uv_kill(pids[i], SIGTERM);
     }
@@ -600,7 +611,7 @@ void child_cb(uv_signal_t *w, int signum)
   // kill this child on exit since it has already exited.
 
   int i;
-  for (i = 0; i < num_processes; i++) {
+  for (i = 0; i < num_workers; i++) {
 	if (pids[i] != 0) {
 	  int status;
 	  if (waitpid(pids[i], &status, WNOHANG) == pids[i]) {
@@ -609,10 +620,10 @@ void child_cb(uv_signal_t *w, int signum)
     }
   }
 
-  // If there are no more child processes we are no longer interested
+  // If there are no more child workers we are no longer interested
   // in SIGCHLD
 
-  for (i = 0; i < num_processes; i++) {
+  for (i = 0; i < num_workers; i++) {
 	if (pids[i] != 0) {
 	  return;
 	}
@@ -633,9 +644,22 @@ int main(int argc, char *argv[])
 
   const SSL_METHOD *method;
   SSL_CTX *ctx;
+#if PLATFORM_WINDOWS
+  WIN32_FIND_DATA FindFileData;
+  HANDLE hFind;
+  const char *starkey = "\\*.key";
+#else
   glob_t g;
+  const char *starkey = "/*.key";
+#endif
+
+  char *pattern;
   int rc, privates_count, sock, i, t;
   struct sockaddr_in addr;
+  STACK_OF(X509_NAME) *cert_names;
+  uv_loop_t *loop;
+  uv_signal_t sigterm_watcher;
+  uv_signal_t sigchld_watcher;
 
   const struct option long_options[] = {
     {"port",                  required_argument, 0, 0},
@@ -646,7 +670,7 @@ int main(int argc, char *argv[])
     {"ca-file",               required_argument, 0, 5},
     {"silent",                no_argument,       0, 6},
     {"pid-file",              required_argument, 0, 7},
-    {"num-processes",         optional_argument, 0, 8}
+    {"num-workers",         optional_argument, 0, 8}
   };
 
   while (1) {
@@ -695,7 +719,7 @@ int main(int argc, char *argv[])
       break;
 
     case 8:
-      num_processes = atoi(optarg);
+      num_workers = atoi(optarg);
       break;
     }
   }
@@ -715,8 +739,8 @@ int main(int argc, char *argv[])
   if (!cipher_list) {
     fatal_error("The --cipher-list parameter must be specified with a list of acceptable ciphers");
   }
-  if (num_processes <= 0 || num_processes > MAX_PROCESSES) {
-    fatal_error("The --num-processes parameter must between 1 and %d", MAX_PROCESSES);
+  if (num_workers <= 0 || num_workers > MAX_WORKERS) {
+    fatal_error("The --num-workers parameter must between 1 and %d", MAX_WORKERS);
   }
 
   SSL_library_init();
@@ -743,7 +767,7 @@ int main(int argc, char *argv[])
 
   SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, 0);
 
-  STACK_OF(X509_NAME) *cert_names = SSL_load_client_CA_file(ca_file);
+  cert_names = SSL_load_client_CA_file(ca_file);
   if (!cert_names) {
     SSL_CTX_free(ctx);
     fatal_error("Failed to load CA file %s", ca_file);
@@ -774,13 +798,42 @@ int main(int argc, char *argv[])
   // files that end with .key and the part before the .key is taken to
   // be the DNS name.
 
-  g.gl_pathc  = 0;
-  g.gl_offs   = 0;
-
-  const char *starkey = "/*.key";
-  char *pattern = (char *)malloc(strlen(private_key_directory)+strlen(starkey)+1);
+  pattern = (char *)malloc(strlen(private_key_directory)+strlen(starkey)+1);
   strcpy(pattern, private_key_directory);
   strcat(pattern, starkey);
+
+#if PLATFORM_WINDOWS
+  hFind = FindFirstFile(starkey, &FindFileData);
+  if (hFind == INVALID_HANDLE_VALUE) {
+    SSL_CTX_free(ctx);
+    fatal_error("Error %d finding private keys in %s", rc, private_key_directory);
+  }
+
+  // count the number of files
+  privates_count = 1;
+  while (FindNextFile(hFind, &FindFileData) != 0) {
+    privates_count++;
+  }
+  FindClose(hFind);
+
+  privates = new_pk_list(privates_count);
+  if (privates == NULL) {
+    SSL_CTX_free(ctx);
+    fatal_error("Failed to allocate room for private keys");
+  }
+
+  hFind = FindFirstFile(starkey, &FindFileData);
+  for (i = 0; i < privates_count; ++i) {
+    if (add_key_from_file(FindFileData.cFileName, privates) != 0) {
+      SSL_CTX_free(ctx);
+      fatal_error("Failed to add private keys");
+    }
+    FindNextFile(hFind, &FindFileData);
+  }
+  FindClose(hFind);
+#else
+  g.gl_pathc  = 0;
+  g.gl_offs   = 0;
 
   rc = glob(pattern, GLOB_NOSORT, 0, &g);
 
@@ -812,6 +865,7 @@ int main(int argc, char *argv[])
 
   free(pattern);
   globfree(&g);
+#endif
 
   sock = socket(AF_INET, SOCK_STREAM, 0);
   if (sock == -1) {
@@ -832,43 +886,46 @@ int main(int argc, char *argv[])
 
   if (bind(sock, (struct sockaddr *)&addr, sizeof(struct sockaddr)) == -1) {
     SSL_CTX_free(ctx);
-    close(sock);
+    SOCKET_CLOSE(sock);
     fatal_error("Can't bind to port %d", port);
   }
 
   if (listen(sock, SOMAXCONN) == -1) {
     SSL_CTX_free(ctx);
-    close(sock);
+    SOCKET_CLOSE(sock);
     fatal_error("Failed to listen on TCP socket");
   }
 
-  for (i = 0; i < num_processes; i++) {
+  for (i = 0; i < num_workers; i++) {
     int pid = fork();
     if (pid == 0) {
-
+      connection_state *f;
+      uv_signal_t signal_watcher;
+	  uv_poll_t *server_watcher;
+	  server_data *data;
+	  uv_loop_t *loop;
 	  // CHILD PROCESS
 
-      uv_poll_t *server_watcher = (uv_poll_t *)malloc(sizeof(uv_poll_t));
-	  server_data *data = (server_data *)malloc(sizeof(server_data));
+      server_watcher = (uv_poll_t *)malloc(sizeof(uv_poll_t));
+	  data = (server_data *)malloc(sizeof(server_data));
 	  data->ctx = ctx;
 	  data->fd = sock;
       server_watcher->data = (void *)data;
-	  uv_loop_t *loop = uv_loop_new();
+	  loop = uv_loop_new();
       uv_poll_init(loop, server_watcher, sock);
       uv_poll_start(server_watcher, UV_READABLE, server_cb);
 
-      uv_signal_t signal_watcher;
 	  signal_watcher.data = (void *)server_watcher;
       uv_signal_init(loop, &signal_watcher);
       uv_signal_start(&signal_watcher, child_signal_cb, SIGTERM);
 
       uv_run(loop, UV_RUN_DEFAULT);
 
-      close(sock);
+      SOCKET_CLOSE(sock);
 	  free(data);
       free(server_watcher);
 
-      connection_state *f = active;
+      f = active;
       while (f) {
         connection_state *n = f->next;
         watcher_terminate(f->watcher);
@@ -884,15 +941,12 @@ int main(int argc, char *argv[])
 
   // PARENT PROCESS
 
-  close(sock);
+  SOCKET_CLOSE(sock);
 
-  uv_loop_t *loop = uv_loop_new();
-
-  uv_signal_t sigterm_watcher;
+  loop = uv_loop_new();
   uv_signal_init(loop, &sigterm_watcher);
   uv_signal_start(&sigterm_watcher, signal_cb, SIGTERM);
 
-  uv_signal_t sigchld_watcher;
   uv_signal_init(loop, &sigchld_watcher);
   uv_signal_start(&sigchld_watcher, child_cb, SIGCHLD);
 
@@ -903,7 +957,7 @@ int main(int argc, char *argv[])
       fclose(fp);
     } else {
       SSL_CTX_free(ctx);
-      close(sock);
+      SOCKET_CLOSE(sock);
       fatal_error("Can't write to pid file %s", pid_file);
     }
     free(pid_file);
