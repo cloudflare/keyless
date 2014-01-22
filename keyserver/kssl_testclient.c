@@ -309,7 +309,7 @@ kssl_header *kssl(SSL *ssl, kssl_header *k, kssl_operation *r)
           fatal_error("Error receiving KSSL payload, size: %d", n);
         }
       }
-      
+
       break;
     }
 

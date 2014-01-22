@@ -49,7 +49,7 @@
 #endif
 
 
-// parse_header: populates a kssl_header structure from a byte stream. Returns 
+// parse_header: populates a kssl_header structure from a byte stream. Returns
 // KSSL_ERROR_NONE if successful.
 kssl_error_code parse_header(BYTE *bytes,            // Stream of bytes containing a kssl_header
                              kssl_header *header) {  // Returns the populated header (must be allocated
@@ -73,7 +73,7 @@ kssl_error_code parse_header(BYTE *bytes,            // Stream of bytes containi
 // to the original stream is added to the kssl_item struct. The offset
 // is updated if provided. Returns KSSL_ERROR_NONE if successful.
 kssl_error_code parse_item(BYTE *bytes,       // Byte stream to parse kssl_item from
-                           int *offset,       // (optional) if present specifies offset 
+                           int *offset,       // (optional) if present specifies offset
                                               // into bytes.
                            kssl_item *item) { // The kssl_item parsed (must be allocated
                                               // by caller)
@@ -200,7 +200,7 @@ kssl_error_code flatten_item(BYTE tag,         // The kssl_item's tag (see kssl.
 }
 
 // flatten_operation: serialize a kssl_operation
-kssl_error_code flatten_operation(kssl_header *header,       // 
+kssl_error_code flatten_operation(kssl_header *header,       //
                                   kssl_operation *operation, //
                                   BYTE **out_operation,      //
                                   int *length) {             //
@@ -349,7 +349,7 @@ kssl_error_code parse_message_payload(BYTE *payload,               //
   return KSSL_ERROR_NONE;
 }
 
-// log_operation: TODO
+// log_operation: write out a KSSL operation to the log
 void log_operation(kssl_operation *op) {
   time_t result;
   char ip_string[INET6_ADDRSTRLEN] = {0};
