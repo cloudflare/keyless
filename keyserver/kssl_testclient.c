@@ -842,10 +842,10 @@ int main(int argc, char *argv[])
 
   const SSL_METHOD *method;
   RSA *private;
-  FILE *fp;
+  BIO *bio;
   SSL_CTX *ctx;
   connection *c0, *c1, *c2, *c3, *c;
-  int i, j, k;
+  int i, j;
   int opt;
   struct timeval stop, start;
   int algs[ALGS_COUNT] = {KSSL_OP_RSA_SIGN_MD5SHA1, KSSL_OP_RSA_SIGN_SHA1, KSSL_OP_RSA_SIGN_SHA224,
@@ -860,6 +860,7 @@ int main(int argc, char *argv[])
     {"debug",       no_argument,       0, 6}
   };
 
+  optind = 1;
   while (1) {
     opt = getopt_long(argc, argv, "", long_options, 0);
     if (opt == -1) {
@@ -911,12 +912,11 @@ int main(int argc, char *argv[])
   SSL_load_error_strings();
   method = TLSv1_2_client_method();
 
-  fp = fopen(private_key, "r");
-  if (!fp) {
-    fatal_error("Failed to open private key file %s", private_key);
-  }
-  private = PEM_read_RSAPrivateKey(fp, 0, 0, 0);
-  fclose(fp);
+  bio = BIO_new(BIO_s_file());
+  BIO_read_filename(bio, private_key);
+  private = PEM_read_bio_RSAPrivateKey(bio, 0, 0, 0);
+
+  BIO_free(bio);
   if (!private) {
     ssl_error();
   }

@@ -28,11 +28,11 @@ struct option
 int getopt(int, char**, char*);
 int getopt_long(int, char**, char*, struct option*, int*);
 
-extern int    opterr;  /* if error message should be printed */
-extern int    optind;  /* index into parent argv vector */
-extern int    optopt;  /* character checked for validity */
-extern int    optreset;  /* reset getopt */
-extern char *optarg;  /* argument associated with option */
+int    opterr;  /* if error message should be printed */
+int    optind;  /* index into parent argv vector */
+int    optopt;  /* character checked for validity */
+int    optreset;  /* reset getopt */
+char *optarg;  /* argument associated with option */
 
 #define __P(x) x
 #define _DIAGASSERT(x) assert(x)
