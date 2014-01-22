@@ -12,7 +12,6 @@
 #include "kssl_helpers.h"
 
 #if PLATFORM_WINDOWS
-#include <winsock2.h>
 #include <ws2tcpip.h>
 #else
 #include <netinet/in.h>

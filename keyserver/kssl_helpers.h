@@ -7,6 +7,7 @@
 
 #ifdef _MSC_VER
 #define PLATFORM_WINDOWS 1
+#define WIN32_LEAN_AND_MEAN
 #else
 #define PLATFORM_WINDOWS 0
 #endif

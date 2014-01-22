@@ -3,14 +3,6 @@
 //
 // Copyright (c) 2013 CloudFlare, Inc.
 
-#include <openssl/bio.h>
-#include <openssl/ssl.h>
-#include <openssl/err.h>
-#include <openssl/conf.h>
-#include <openssl/engine.h>
-
-#include <stdarg.h>
-
 #include "kssl.h"
 #include "kssl_helpers.h"
 
@@ -21,14 +13,23 @@
 #include <sys/socket.h>
 #include <sys/wait.h>
 #include <netinet/ip.h>
-#include <glob.h>
 #include <getopt.h>
-#include <uv.h>
+#include <glob.h>
 #endif
 #include <fcntl.h>
+#include <uv.h>
+
+#include <openssl/bio.h>
+#include <openssl/ssl.h>
+#include <openssl/err.h>
+#include <openssl/conf.h>
+#include <openssl/engine.h>
+
+#include <stdarg.h>
+
+#include "kssl_cli.h"
 
 #include "kssl_log.h"
-
 #include "kssl_private_key.h"
 #include "kssl_core.h"
 
@@ -336,6 +337,7 @@ kssl_error_code write_queued_messages(connection_state *state)
         return KSSL_ERROR_INTERNAL;
 
       default:
+		fprintf(stderr, "SSL_write: %d/%d\n", rc, SSL_get_error(ssl, rc));
         log_ssl_error(ssl, rc);
         return KSSL_ERROR_INTERNAL;
       }
@@ -677,9 +679,21 @@ int main(int argc, char *argv[])
 
   const SSL_METHOD *method;
   SSL_CTX *ctx;
+#if PLATFORM_WINDOWS
+  WIN32_FIND_DATA FindFileData;
+  HANDLE hFind;
+  const char *starkey = "\\*.key";
+#else
   glob_t g;
+  char *pattern;
+  const char *starkey = "/*.key";
+#endif
+
   int rc, privates_count, i;
   struct sockaddr_in addr;
+  STACK_OF(X509_NAME) *cert_names;
+  uv_loop_t *loop;
+  uv_signal_t sigterm_watcher;
 
   const struct option long_options[] = {
     {"port",                  required_argument, 0, 0},
@@ -788,7 +802,7 @@ int main(int argc, char *argv[])
 
   SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, 0);
 
-  STACK_OF(X509_NAME) *cert_names = SSL_load_client_CA_file(ca_file);
+  cert_names = SSL_load_client_CA_file(ca_file);
   if (!cert_names) {
     SSL_CTX_free(ctx);
     fatal_error("Failed to load CA file %s", ca_file);
@@ -819,13 +833,42 @@ int main(int argc, char *argv[])
   // files that end with .key and the part before the .key is taken to
   // be the DNS name.
 
-  g.gl_pathc  = 0;
-  g.gl_offs   = 0;
-
-  const char *starkey = "/*.key";
-  char *pattern = (char *)malloc(strlen(private_key_directory)+strlen(starkey)+1);
+  pattern = (char *)malloc(strlen(private_key_directory)+strlen(starkey)+1);
   strcpy(pattern, private_key_directory);
   strcat(pattern, starkey);
+
+#if PLATFORM_WINDOWS
+  hFind = FindFirstFile(starkey, &FindFileData);
+  if (hFind == INVALID_HANDLE_VALUE) {
+    SSL_CTX_free(ctx);
+    fatal_error("Error %d finding private keys in %s", rc, private_key_directory);
+  }
+
+  // count the number of files
+  privates_count = 1;
+  while (FindNextFile(hFind, &FindFileData) != 0) {
+    privates_count++;
+  }
+  FindClose(hFind);
+
+  privates = new_pk_list(privates_count);
+  if (privates == NULL) {
+    SSL_CTX_free(ctx);
+    fatal_error("Failed to allocate room for private keys");
+  }
+
+  hFind = FindFirstFile(starkey, &FindFileData);
+  for (i = 0; i < privates_count; ++i) {
+    if (add_key_from_file(FindFileData.cFileName, privates) != 0) {
+      SSL_CTX_free(ctx);
+      fatal_error("Failed to add private keys");
+    }
+    FindNextFile(hFind, &FindFileData);
+  }
+  FindClose(hFind);
+#else
+  g.gl_pathc  = 0;
+  g.gl_offs   = 0;
 
   rc = glob(pattern, GLOB_NOSORT, 0, &g);
 
@@ -857,6 +900,7 @@ int main(int argc, char *argv[])
 
   free(pattern);
   globfree(&g);
+#endif
 
   // TODO: port this to libuv
   //
@@ -865,7 +909,7 @@ int main(int argc, char *argv[])
   //  fatal_error("Failed to set socket option SO_REUSERADDR");
   // }
 
-  uv_loop_t *loop = uv_loop_new();
+  loop = uv_loop_new();
   uv_tcp_init(loop, &tcp_server);
 
   addr.sin_family = AF_INET;
@@ -885,7 +929,6 @@ int main(int argc, char *argv[])
     fatal_error("Failed to listen on TCP socket");
   }
 
-  uv_signal_t sigterm_watcher;
   uv_signal_init(loop, &sigterm_watcher);
   uv_signal_start(&sigterm_watcher, sigterm_cb, SIGTERM);
 
