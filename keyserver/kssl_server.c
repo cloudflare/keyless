@@ -921,7 +921,7 @@ int main(int argc, char *argv[])
   addr.sin_family = AF_INET;
   addr.sin_port = htons(port);
   addr.sin_addr.s_addr = INADDR_ANY;
-  bzero(&(addr.sin_zero), 8);
+  memset(&(addr.sin_zero), 0, 8);
 
   if (uv_tcp_bind(&tcp_server, (const struct sockaddr*)&addr, 0) != 0) {
     SSL_CTX_free(ctx);
