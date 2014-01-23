@@ -18,6 +18,7 @@
 #endif
 
 #include <ctype.h>
+#include <uv.h>
 
 #include <openssl/evp.h>
 #include <openssl/ssl.h>
@@ -822,14 +823,12 @@ typedef struct signing_data_ {
   int alg;
 } signing_data;
 
-void *thread_repeat_rsa_sign(void *ptr) {
+void thread_repeat_rsa_sign(void *ptr) {
   signing_data *data = (signing_data*)ptr;
 
   connection *c1 = ssl_connect(data->ctx, data->port);
   kssl_repeat_op_rsa_sign(c1, data->private, data->repeat, data->alg);
   ssl_disconnect(c1);
-
-  return NULL;
 }
 
 int main(int argc, char *argv[])
@@ -1104,10 +1103,12 @@ int main(int argc, char *argv[])
           (stop.tv_usec - start.tv_usec) / 1000);
     }
   }
-#if THREADED_TEST
-  // 2 pthreads: currently blocked by openssl thread-safety
-  pthread_t thread[LOOP_COUNT];
+
+  // 2 threads
+  uv_thread_t thread[LOOP_COUNT];
   signing_data data[LOOP_COUNT];
+  thread_setup();
+
   for (i = 0; i < ALGS_COUNT; i++) {
     gettimeofday(&start, NULL);
     for (j = 0; j < 2; j++) {
@@ -1116,17 +1117,18 @@ int main(int argc, char *argv[])
       data[j].port = port;
       data[j].repeat = LOOP_COUNT/2;
       data[j].alg = algs[i];
-      pthread_create(&thread[j], NULL, thread_repeat_rsa_sign, (void *)&data[j]);
+      uv_thread_create(&thread[j], thread_repeat_rsa_sign, (void *)&data[j]);
     }
     for (j = 0; j < 2; j++) {
-      pthread_join(thread[j], NULL);
+      uv_thread_join(&thread[j]);
     }
     gettimeofday(&stop, NULL);
     printf("\n %d requests %s over 2 threads takes %ld ms\n", LOOP_COUNT, opstring(algs[i]),
         (stop.tv_sec - start.tv_sec) * 1000 +
         (stop.tv_usec - start.tv_usec) / 1000);
   }
-#endif // THREADED_TEST
+
+  thread_cleanup();
 #if !PLATFORM_WINDOWS
   // Test requests over multiple processes
   {

@@ -337,7 +337,7 @@ kssl_error_code write_queued_messages(connection_state *state)
         return KSSL_ERROR_INTERNAL;
 
       default:
-		fprintf(stderr, "SSL_write: %d/%d\n", rc, SSL_get_error(ssl, rc));
+        fprintf(stderr, "SSL_write: %d/%d\n", rc, SSL_get_error(ssl, rc));
         log_ssl_error(ssl, rc);
         return KSSL_ERROR_INTERNAL;
       }
@@ -368,7 +368,7 @@ void clear_read_queue(connection_state *state)
 void wrote_cb(uv_write_t* req, int status)
 {
   if (req) {
-	free(req);
+    free(req);
   }
 }
 
@@ -381,13 +381,13 @@ int flush_write(connection_state *state)
   int n;
 
   while ((n = BIO_read(state->write_bio, &b[0], BUF_SIZE)) > 0) {
-	uv_write_t *req = (uv_write_t *)malloc(sizeof(uv_write_t));
-	uv_buf_t buf = uv_buf_init(&b[0], n);
+    uv_write_t *req = (uv_write_t *)malloc(sizeof(uv_write_t));
+    uv_buf_t buf = uv_buf_init(&b[0], n);
 
-	int rc = uv_write(req, (uv_stream_t*)state->tcp, &buf, 1, wrote_cb);
-	if (rc < 0) {
-	  return 0;
-	}
+    int rc = uv_write(req, (uv_stream_t*)state->tcp, &buf, 1, wrote_cb);
+    if (rc < 0) {
+      return 0;
+    }
   }
 
   return 1;
@@ -397,19 +397,22 @@ int flush_write(connection_state *state)
 // waiting. Returns 1 if ok, 0 if the connection should be terminated
 int do_ssl(connection_state *state)
 {
+  BYTE *response = NULL;
+  int response_len = 0;
+  kssl_error_code err;
 
   // First determine whether the SSL_accept has completed. If not then any
   // data on the TCP connection is related to the handshake and is not
   // application data.
 
   if (!state->connected) {
-	if (!SSL_is_init_finished(state->ssl)) {
-	  if (SSL_do_handshake(state->ssl) != 1) {
-		return 1;
-	  }
-	}
+  if (!SSL_is_init_finished(state->ssl)) {
+    if (SSL_do_handshake(state->ssl) != 1) {
+      return 1;
+    }
+  }
 
-	state->connected = 1;
+  state->connected = 1;
   }
 
   // Read whatever data needs to be read (controlled by state->need)
@@ -417,9 +420,9 @@ int do_ssl(connection_state *state)
   while (state->need > 0) {
     int read = SSL_read(state->ssl, state->current, state->need);
 
-	if (read == 0) {
-	  return 1;
-	}
+    if (read == 0) {
+      return 1;
+    }
 
     if (read < 0) {
       int err = SSL_get_error(state->ssl, read);
@@ -441,13 +444,13 @@ int do_ssl(connection_state *state)
 
       case SSL_ERROR_ZERO_RETURN:
         ERR_clear_error();
-		return 0;
+        return 0;
 
         // Something went wrong so give up on connetion
 
       default:
         log_ssl_error(state->ssl, read);
-		return 0;
+        return 0;
       }
     }
 
@@ -471,7 +474,7 @@ int do_ssl(connection_state *state)
     // processed.
 
     if (state->state == CONNECTION_STATE_GET_HEADER) {
-      kssl_error_code err = parse_header(state->wire_header, &state->header);
+      err = parse_header(state->wire_header, &state->header);
       if (err != KSSL_ERROR_NONE) {
         return 0;
       }
@@ -513,9 +516,7 @@ int do_ssl(connection_state *state)
     // When we reach here state->header is valid and filled in and if
     // necessary state->start points to the payload.
 
-	BYTE *response = NULL;
-	int response_len = 0;
-	kssl_error_code err = kssl_operate(&state->header, state->start, privates, &response, &response_len);
+    err = kssl_operate(&state->header, state->start, privates, &response, &response_len);
     if (err != KSSL_ERROR_NONE) {
       log_err_error();
     } else  {
@@ -544,28 +545,28 @@ void read_cb(uv_stream_t *s, ssize_t nread, const uv_buf_t *buf)
 
   if (nread > 0) {
 
-	// If there's data to read then pass it to OpenSSL via the BIO
+    // If there's data to read then pass it to OpenSSL via the BIO
 
-	// TODO: check return value
-	BIO_write(state->read_bio, buf->base, nread);
+    // TODO: check return value
+    BIO_write(state->read_bio, buf->base, nread);
   }
 
   if (nread == -1) {
-	connection_terminate(state->tcp);
+    connection_terminate(state->tcp);
   } else {
-	if (do_ssl(state)) {
-	  write_queued_messages(state);
-	  flush_write(state);
-	} else {
-	  connection_terminate(state->tcp);
-	}
+    if (do_ssl(state)) {
+      write_queued_messages(state);
+      flush_write(state);
+    } else {
+      connection_terminate(state->tcp);
+    }
   }
 
   // Buffer was previously allocated by us in a call to
   // allocate_cb. libuv will not reuse so we must free.
 
   if (buf && buf->base) {
-	free(buf->base);
+    free(buf->base);
   }
 }
 
@@ -576,9 +577,9 @@ void allocate_cb(uv_handle_t *h, size_t s, uv_buf_t *buf)
   buf->base = (char *)malloc(s);
 
   if (buf->base) {
-	buf->len = s;
+    buf->len = s;
   } else {
-	buf->len = 0;
+    buf->len = 0;
   }
 }
 
@@ -587,8 +588,8 @@ void allocate_cb(uv_handle_t *h, size_t s, uv_buf_t *buf)
 void new_connection_cb(uv_stream_t *server, int status)
 {
   if (status == -1) {
-	// TODO: should we log this?
-	return;
+    // TODO: should we log this?
+    return;
   }
 
   SSL_CTX *ctx = (SSL_CTX *)server->data;
@@ -601,9 +602,9 @@ void new_connection_cb(uv_stream_t *server, int status)
   uv_tcp_t *client = (uv_tcp_t *)malloc(sizeof(uv_tcp_t));
   uv_tcp_init(server->loop, client);
   if (uv_accept(server, (uv_stream_t *)client) != 0) {
-	uv_close((uv_handle_t *)client, close_cb);
-	write_log("Failed to accept TCP connection");
-	return;
+    uv_close((uv_handle_t *)client, close_cb);
+    write_log("Failed to accept TCP connection");
+    return;
   }
 
   connection_state *state = (connection_state *)malloc(sizeof(connection_state));
@@ -704,7 +705,7 @@ int main(int argc, char *argv[])
     {"ca-file",               required_argument, 0, 5},
     {"silent",                no_argument,       0, 6},
     {"pid-file",              required_argument, 0, 7},
-    {"num-workers",         optional_argument, 0, 8}
+    {"num-workers",           optional_argument, 0, 8}
   };
 
   while (1) {
@@ -949,3 +950,4 @@ int main(int argc, char *argv[])
 
   return 0;
 }
+
