@@ -1105,30 +1105,32 @@ int main(int argc, char *argv[])
   }
 
   // 2 threads
-  uv_thread_t thread[LOOP_COUNT];
-  signing_data data[LOOP_COUNT];
-  thread_setup();
+  {
+    uv_thread_t thread[LOOP_COUNT];
+    signing_data data[LOOP_COUNT];
+    thread_setup();
 
-  for (i = 0; i < ALGS_COUNT; i++) {
-    gettimeofday(&start, NULL);
-    for (j = 0; j < 2; j++) {
-      data[j].ctx = ctx;
-      data[j].private = private;
-      data[j].port = port;
-      data[j].repeat = LOOP_COUNT/2;
-      data[j].alg = algs[i];
-      uv_thread_create(&thread[j], thread_repeat_rsa_sign, (void *)&data[j]);
-    }
-    for (j = 0; j < 2; j++) {
-      uv_thread_join(&thread[j]);
-    }
-    gettimeofday(&stop, NULL);
-    printf("\n %d requests %s over 2 threads takes %ld ms\n", LOOP_COUNT, opstring(algs[i]),
+    for (i = 0; i < ALGS_COUNT; i++) {
+      gettimeofday(&start, NULL);
+      for (j = 0; j < 2; j++) {
+        data[j].ctx = ctx;
+        data[j].private = private;
+        data[j].port = port;
+        data[j].repeat = LOOP_COUNT/2;
+        data[j].alg = algs[i];
+        uv_thread_create(&thread[j], thread_repeat_rsa_sign, (void *)&data[j]);
+      }
+      for (j = 0; j < 2; j++) {
+        uv_thread_join(&thread[j]);
+      }
+      gettimeofday(&stop, NULL);
+      printf("\n %d requests %s over 2 threads takes %ld ms\n", LOOP_COUNT, opstring(algs[i]),
         (stop.tv_sec - start.tv_sec) * 1000 +
         (stop.tv_usec - start.tv_usec) / 1000);
-  }
+    }
 
-  thread_cleanup();
+    thread_cleanup();
+  }
 #if !PLATFORM_WINDOWS
   // Test requests over multiple processes
   {
