@@ -587,19 +587,24 @@ void allocate_cb(uv_handle_t *h, size_t s, uv_buf_t *buf)
 // server is ready to read (i.e. there's an incoming connection).
 void new_connection_cb(uv_stream_t *server, int status)
 {
+  SSL_CTX *ctx;
+  SSL *ssl;
+  uv_tcp_t *client;
+  connection_state *state;
+  
   if (status == -1) {
     // TODO: should we log this?
     return;
   }
 
-  SSL_CTX *ctx = (SSL_CTX *)server->data;
-  SSL *ssl = SSL_new(ctx);
+  ctx = (SSL_CTX *)server->data;
+  ssl = SSL_new(ctx);
   if (!ssl) {
     write_log("Failed to create SSL context");
     return;
   }
 
-  uv_tcp_t *client = (uv_tcp_t *)malloc(sizeof(uv_tcp_t));
+  client = (uv_tcp_t *)malloc(sizeof(uv_tcp_t));
   uv_tcp_init(server->loop, client);
   if (uv_accept(server, (uv_stream_t *)client) != 0) {
     uv_close((uv_handle_t *)client, close_cb);
@@ -607,7 +612,7 @@ void new_connection_cb(uv_stream_t *server, int status)
     return;
   }
 
-  connection_state *state = (connection_state *)malloc(sizeof(connection_state));
+  state = (connection_state *)malloc(sizeof(connection_state));
   initialize_state(state);
   state->tcp = client;
   set_get_header_state(state);
@@ -680,13 +685,13 @@ int main(int argc, char *argv[])
 
   const SSL_METHOD *method;
   SSL_CTX *ctx;
+  char *pattern;
 #if PLATFORM_WINDOWS
   WIN32_FIND_DATA FindFileData;
   HANDLE hFind;
   const char *starkey = "\\*.key";
 #else
   glob_t g;
-  char *pattern;
   const char *starkey = "/*.key";
 #endif
 
@@ -916,7 +921,7 @@ int main(int argc, char *argv[])
   addr.sin_family = AF_INET;
   addr.sin_port = htons(port);
   addr.sin_addr.s_addr = INADDR_ANY;
-  bzero(&(addr.sin_zero), 8);
+  memset(&(addr.sin_zero), 0, 8);
 
   if (uv_tcp_bind(&tcp_server, (const struct sockaddr*)&addr, 0) != 0) {
     SSL_CTX_free(ctx);
