@@ -712,7 +712,7 @@ int main(int argc, char *argv[])
     {"pid-file",              required_argument, 0, 7},
     {"num-workers",           optional_argument, 0, 8}
   };
-
+  optind = 1;
   while (1) {
     int c = getopt_long(argc, argv, "", long_options, 0);
     if (c == -1) {
@@ -844,7 +844,7 @@ int main(int argc, char *argv[])
   strcat(pattern, starkey);
 
 #if PLATFORM_WINDOWS
-  hFind = FindFirstFile(starkey, &FindFileData);
+  hFind = FindFirstFile(pattern, &FindFileData);
   if (hFind == INVALID_HANDLE_VALUE) {
     SSL_CTX_free(ctx);
     fatal_error("Error %d finding private keys in %s", rc, private_key_directory);
@@ -863,13 +863,18 @@ int main(int argc, char *argv[])
     fatal_error("Failed to allocate room for private keys");
   }
 
-  hFind = FindFirstFile(starkey, &FindFileData);
+  hFind = FindFirstFile(pattern, &FindFileData);
   for (i = 0; i < privates_count; ++i) {
-    if (add_key_from_file(FindFileData.cFileName, privates) != 0) {
+    char* path = (char *)malloc(strlen(private_key_directory)+1+strlen(FindFileData.cFileName)+1);
+    strcpy(path, private_key_directory);
+	strcat(path, "\\");
+    strcat(path, FindFileData.cFileName);
+    if (add_key_from_file(path, privates) != 0) {
       SSL_CTX_free(ctx);
       fatal_error("Failed to add private keys");
     }
     FindNextFile(hFind, &FindFileData);
+	free(path);
   }
   FindClose(hFind);
 #else
