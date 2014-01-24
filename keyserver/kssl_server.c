@@ -410,13 +410,13 @@ int do_ssl(connection_state *state)
   // application data.
 
   if (!state->connected) {
-  if (!SSL_is_init_finished(state->ssl)) {
-    if (SSL_do_handshake(state->ssl) != 1) {
-      return 1;
+    if (!SSL_is_init_finished(state->ssl)) {
+      if (SSL_do_handshake(state->ssl) != 1) {
+        return 1;
+      }
     }
-  }
 
-  state->connected = 1;
+    state->connected = 1;
   }
 
   // Read whatever data needs to be read (controlled by state->need)
@@ -424,17 +424,17 @@ int do_ssl(connection_state *state)
   while (state->need > 0) {
     int read = SSL_read(state->ssl, state->current, state->need);
 
-	if (read == 0) {
+    if (read == 0) {
 
-	  // TODO: check this logic
+      // TODO: check this logic
 
       int err = SSL_get_error(state->ssl, read);
-	  if (err == SSL_ERROR_ZERO_RETURN) {
-		return 1;
-	  }
+      if (err == SSL_ERROR_ZERO_RETURN) {
+        return 1;
+      }
 
-	  return 1;
-	}
+      return 1;
+    }
 
     if (read < 0) {
       int err = SSL_get_error(state->ssl, read);
@@ -564,7 +564,7 @@ void read_cb(uv_stream_t *s, ssize_t nread, const uv_buf_t *buf)
   }
 
   if (nread == UV_EOF) {
-	//	connection_terminate(state->tcp);
+    //    connection_terminate(state->tcp);
   } else {
     if (do_ssl(state)) {
       write_queued_messages(state);
@@ -881,14 +881,14 @@ int main(int argc, char *argv[])
   for (i = 0; i < privates_count; ++i) {
     char* path = (char *)malloc(strlen(private_key_directory)+1+strlen(FindFileData.cFileName)+1);
     strcpy(path, private_key_directory);
-	strcat(path, "\\");
+    strcat(path, "\\");
     strcat(path, FindFileData.cFileName);
     if (add_key_from_file(path, privates) != 0) {
       SSL_CTX_free(ctx);
       fatal_error("Failed to add private keys");
     }
     FindNextFile(hFind, &FindFileData);
-	free(path);
+    free(path);
   }
   FindClose(hFind);
 #else
