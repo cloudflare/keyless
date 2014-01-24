@@ -264,8 +264,15 @@ void free_read_state(connection_state *state)
 }
 
 // close_cb: called when a TCP connection has been closed
-void close_cb(uv_handle_t *h)
+void close_cb(uv_handle_t *tcp)
 {
+  connection_state *state = (connection_state *)tcp->data;
+
+  SSL_free(state->ssl);
+
+  free(tcp);
+  free_read_state(state);
+  free(state);
 }
 
 // connection_terminate: terminate an SSL connection and remove from
@@ -279,20 +286,15 @@ void connection_terminate(uv_tcp_t *tcp)
   if (rc == 0) {
     SSL_shutdown(ssl);
   }
+
   uv_read_stop((uv_stream_t *)tcp);
-  uv_close((uv_handle_t *)tcp, close_cb);
-  SSL_free(ssl);
-  BIO_free_all(state->read_bio);
-  BIO_free_all(state->write_bio);
 
   *(state->prev) = state->next;
   if (state->next) {
     state->next->prev = state->prev;
   }
 
-  free(tcp);
-  free_read_state(state);
-  free(state);
+  uv_close((uv_handle_t *)tcp, close_cb);
 }
 
 // write_queued_message: write all messages in the queue onto the wire
@@ -337,7 +339,6 @@ kssl_error_code write_queued_messages(connection_state *state)
         return KSSL_ERROR_INTERNAL;
 
       default:
-        fprintf(stderr, "SSL_write: %d/%d\n", rc, SSL_get_error(ssl, rc));
         log_ssl_error(ssl, rc);
         return KSSL_ERROR_INTERNAL;
       }
@@ -406,13 +407,13 @@ int do_ssl(connection_state *state)
   // application data.
 
   if (!state->connected) {
-  if (!SSL_is_init_finished(state->ssl)) {
-    if (SSL_do_handshake(state->ssl) != 1) {
-      return 1;
+    if (!SSL_is_init_finished(state->ssl)) {
+      if (SSL_do_handshake(state->ssl) != 1) {
+        return 1;
+      }
     }
-  }
 
-  state->connected = 1;
+    state->connected = 1;
   }
 
   // Read whatever data needs to be read (controlled by state->need)
@@ -420,11 +421,7 @@ int do_ssl(connection_state *state)
   while (state->need > 0) {
     int read = SSL_read(state->ssl, state->current, state->need);
 
-    if (read == 0) {
-      return 1;
-    }
-
-    if (read < 0) {
+    if (read <= 0) {
       int err = SSL_get_error(state->ssl, read);
       switch (err) {
 
@@ -546,12 +543,12 @@ void read_cb(uv_stream_t *s, ssize_t nread, const uv_buf_t *buf)
   if (nread > 0) {
 
     // If there's data to read then pass it to OpenSSL via the BIO
-
     // TODO: check return value
+
     BIO_write(state->read_bio, buf->base, nread);
   }
 
-  if (nread == -1) {
+  if (nread == UV_EOF) {
     connection_terminate(state->tcp);
   } else {
     if (do_ssl(state)) {
@@ -591,16 +588,9 @@ void new_connection_cb(uv_stream_t *server, int status)
   SSL *ssl;
   uv_tcp_t *client;
   connection_state *state;
-  
+
   if (status == -1) {
     // TODO: should we log this?
-    return;
-  }
-
-  ctx = (SSL_CTX *)server->data;
-  ssl = SSL_new(ctx);
-  if (!ssl) {
-    write_log("Failed to create SSL context");
     return;
   }
 
@@ -616,6 +606,15 @@ void new_connection_cb(uv_stream_t *server, int status)
   initialize_state(state);
   state->tcp = client;
   set_get_header_state(state);
+
+  ctx = (SSL_CTX *)server->data;
+  ssl = SSL_new(ctx);
+  if (!ssl) {
+    uv_close((uv_handle_t *)client, close_cb);
+    write_log("Failed to create SSL context");
+    return;
+  }
+
   state->ssl = ssl;
 
   // Set up OpenSSL to use a memory BIO. We'll read and write from this BIO
@@ -648,6 +647,8 @@ uv_tcp_t tcp_server;
 // sigterm_cb: handle SIGTERM and terminates program cleanly
 void sigterm_cb(uv_signal_t *w, int signum)
 {
+  // TODO: terminate any existing connections
+
   uv_signal_stop(w);
   uv_close((uv_handle_t *)&tcp_server, 0);
 }
@@ -867,14 +868,14 @@ int main(int argc, char *argv[])
   for (i = 0; i < privates_count; ++i) {
     char* path = (char *)malloc(strlen(private_key_directory)+1+strlen(FindFileData.cFileName)+1);
     strcpy(path, private_key_directory);
-	strcat(path, "\\");
+    strcat(path, "\\");
     strcat(path, FindFileData.cFileName);
     if (add_key_from_file(path, privates) != 0) {
       SSL_CTX_free(ctx);
       fatal_error("Failed to add private keys");
     }
     FindNextFile(hFind, &FindFileData);
-	free(path);
+    free(path);
   }
   FindClose(hFind);
 #else
@@ -912,13 +913,6 @@ int main(int argc, char *argv[])
   free(pattern);
   globfree(&g);
 #endif
-
-  // TODO: port this to libuv
-  //
-  //  if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &t, sizeof(int)) == -1) {
-  //  SSL_CTX_free(ctx);
-  //  fatal_error("Failed to set socket option SO_REUSERADDR");
-  // }
 
   loop = uv_loop_new();
   uv_tcp_init(loop, &tcp_server);

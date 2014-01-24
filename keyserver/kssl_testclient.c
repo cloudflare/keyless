@@ -337,7 +337,7 @@ void kssl_bad_opcode(connection *c)
   kssl_operation req, resp;
   kssl_header *h;
 
-  test("Bad KSSL opcode (%d)", c->fd);
+  test("Bad KSSL opcode (%p)", c);
   bad.version_maj = KSSL_VERSION_MAJ;
   bad.version_min = KSSL_VERSION_MIN;
   bad.id = 0x12345678;
@@ -362,7 +362,7 @@ void kssl_op_pong(connection *c)
   kssl_header echo0;
   kssl_operation req, resp;
   kssl_header *h;
-  test("KSSL_OP_PONG (%d)", c->fd);
+  test("KSSL_OP_PONG (%p)", c);
 
   echo0.version_maj = KSSL_VERSION_MAJ;
   echo0.version_min = KSSL_VERSION_MIN;
@@ -387,7 +387,7 @@ void kssl_op_error(connection *c)
   kssl_header echo0;
   kssl_operation req, resp;
   kssl_header *h;
-  test("KSSL_OP_ERROR (%d)", c->fd);
+  test("KSSL_OP_ERROR (%p)", c);
 
   echo0.version_maj = KSSL_VERSION_MAJ;
   echo0.id = 0x12345678;
@@ -411,7 +411,7 @@ void kssl_op_ping_no_payload(connection *c)
   kssl_header echo0;
   kssl_operation req, resp;
   kssl_header *h;
-  test("KSSL_OP_PING with no payload (%d)", c->fd);
+  test("KSSL_OP_PING with no payload (%p)", c);
 
   echo0.version_maj = KSSL_VERSION_MAJ;
   echo0.id = 0x12345678;
@@ -436,7 +436,7 @@ void kssl_op_ping_payload(connection *c)
   kssl_header echo1;
   kssl_header *h;
   BYTE *payload;
-  test("KSSL_OP_PING with payload (%d)", c->fd);
+  test("KSSL_OP_PING with payload (%p)", c);
 
   payload = malloc(strlen(hello) + 1);
   echo1.version_maj = KSSL_VERSION_MAJ;
@@ -467,7 +467,7 @@ void kssl_repeat_op_ping(connection *c, int repeat)
   kssl_header *h;
   int i;
   BYTE *payload = malloc(255 + 1);
-  test("Repeat KSSL_OP_PING %d times (%d)", repeat, c->fd);
+  test("Repeat KSSL_OP_PING %d times (%p)", repeat, c);
   echo1.version_maj = KSSL_VERSION_MAJ;
   echo1.id = 0x12345679;
   zero_operation(&req);
@@ -499,7 +499,7 @@ void kssl_op_ping_bad_version(connection *c)
   kssl_header echo0;
   kssl_operation req, resp;
   kssl_header *h;
-  test("KSSL_OP_PING with bad version (%d)", c->fd);
+  test("KSSL_OP_PING with bad version (%p)", c);
   echo0.id = 0x12345678;
   echo0.version_maj = KSSL_VERSION_MAJ+1;
   zero_operation(&req);
@@ -525,7 +525,7 @@ void kssl_op_rsa_decrypt(connection *c, RSA *private)
   kssl_operation req, resp;
   kssl_header *h;
   int size;
-  test("KSSL_OP_RSA_DECRYPT (%d)", c->fd);
+  test("KSSL_OP_RSA_DECRYPT (%p)", c);
   decrypt.version_maj = KSSL_VERSION_MAJ;
   decrypt.id = 0x1234567a;
   zero_operation(&req);
@@ -582,7 +582,7 @@ void kssl_op_rsa_sign(connection *c, RSA *private, int opcode)
 
   int i, rc;
   kssl_header *h;
-  test("KSSL_OP_RSA_SIGN_* (%d)", c->fd);
+  test("KSSL_OP_RSA_SIGN_* (%p)", c);
   for (i = 0; i < ALGS_COUNT; i++) {
     kssl_header sign;
     kssl_operation req, resp;
@@ -679,7 +679,7 @@ void kssl_op_rsa_decrypt_bad_data(connection *c, RSA *private)
   int size;
   kssl_header *h;
 
-  test("KSSL_OP_RSA_DECRYPT with bad data (%d)", c->fd);
+  test("KSSL_OP_RSA_DECRYPT with bad data (%p)", c);
   decrypt.version_maj = KSSL_VERSION_MAJ;
   decrypt.id = 0x1234567a;
   zero_operation(&req);
@@ -752,7 +752,8 @@ connection *ssl_connect(SSL_CTX *ctx, int port)
 
   rc = SSL_connect(c->ssl);
   if (rc != 1) {
-    fatal_error("TLS handshake error %d\n", SSL_get_error(c->ssl, rc));
+    ERR_print_errors_fp(stderr);
+    fatal_error("TLS handshake error %d/%d\n", rc, SSL_get_error(c->ssl, rc));
   }
 
   rc = SSL_get_verify_result(c->ssl);
@@ -782,7 +783,7 @@ void kssl_op_rsa_decrypt_bad_digest(connection *c, RSA *private)
   kssl_header *h;
   kssl_operation req, resp;
 
-  test("KSSL_OP_RSA_DECRYPT with bad digest (%d)", c->fd);
+  test("KSSL_OP_RSA_DECRYPT with bad digest (%p)", c);
   decrypt.version_maj = KSSL_VERSION_MAJ;
   decrypt.id = 0x1234567a;
   zero_operation(&req);
@@ -1134,6 +1135,7 @@ int main(int argc, char *argv[])
 #if !PLATFORM_WINDOWS
   // Test requests over multiple processes
   {
+    int k;
     int forks[8] = {1, 2, 4, 8, 16, 32, 64, 128};
     pid_t pid[LOOP_COUNT];
     signing_data data[LOOP_COUNT];
