@@ -264,8 +264,18 @@ void free_read_state(connection_state *state)
 }
 
 // close_cb: called when a TCP connection has been closed
-void close_cb(uv_handle_t *h)
+void close_cb(uv_handle_t *tcp)
 {
+  connection_state *state = (connection_state *)tcp->data;
+  SSL *ssl = state->ssl;
+
+  SSL_free(ssl);
+  BIO_free_all(state->read_bio);
+  BIO_free_all(state->write_bio);
+
+  free(tcp);
+  free_read_state(state);
+  free(state);
 }
 
 // connection_terminate: terminate an SSL connection and remove from
@@ -279,20 +289,15 @@ void connection_terminate(uv_tcp_t *tcp)
   if (rc == 0) {
     SSL_shutdown(ssl);
   }
+
   uv_read_stop((uv_stream_t *)tcp);
-  uv_close((uv_handle_t *)tcp, close_cb);
-  SSL_free(ssl);
-  BIO_free_all(state->read_bio);
-  BIO_free_all(state->write_bio);
 
   *(state->prev) = state->next;
   if (state->next) {
     state->next->prev = state->prev;
   }
 
-  free(tcp);
-  free_read_state(state);
-  free(state);
+  uv_close((uv_handle_t *)tcp, close_cb);
 }
 
 // write_queued_message: write all messages in the queue onto the wire
@@ -337,7 +342,6 @@ kssl_error_code write_queued_messages(connection_state *state)
         return KSSL_ERROR_INTERNAL;
 
       default:
-		fprintf(stderr, "SSL_write: %d/%d\n", rc, SSL_get_error(ssl, rc));
         log_ssl_error(ssl, rc);
         return KSSL_ERROR_INTERNAL;
       }
@@ -418,6 +422,14 @@ int do_ssl(connection_state *state)
     int read = SSL_read(state->ssl, state->current, state->need);
 
 	if (read == 0) {
+
+	  // TODO: check this logic
+
+      int err = SSL_get_error(state->ssl, read);
+	  if (err == SSL_ERROR_ZERO_RETURN) {
+		return 1;
+	  }
+
 	  return 1;
 	}
 
@@ -550,8 +562,8 @@ void read_cb(uv_stream_t *s, ssize_t nread, const uv_buf_t *buf)
 	BIO_write(state->read_bio, buf->base, nread);
   }
 
-  if (nread == -1) {
-	connection_terminate(state->tcp);
+  if (nread == UV_EOF) {
+	//	connection_terminate(state->tcp);
   } else {
 	if (do_ssl(state)) {
 	  write_queued_messages(state);
@@ -642,6 +654,8 @@ uv_tcp_t tcp_server;
 // sigterm_cb: handle SIGTERM and terminates program cleanly
 void sigterm_cb(uv_signal_t *w, int signum)
 {
+  // TODO: terminate any existing connections
+
   uv_signal_stop(w);
   uv_close((uv_handle_t *)&tcp_server, 0);
 }
