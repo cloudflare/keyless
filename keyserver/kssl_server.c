@@ -267,11 +267,8 @@ void free_read_state(connection_state *state)
 void close_cb(uv_handle_t *tcp)
 {
   connection_state *state = (connection_state *)tcp->data;
-  SSL *ssl = state->ssl;
 
-  SSL_free(ssl);
-  BIO_free_all(state->read_bio);
-  BIO_free_all(state->write_bio);
+  SSL_free(state->ssl);
 
   free(tcp);
   free_read_state(state);
@@ -424,19 +421,7 @@ int do_ssl(connection_state *state)
   while (state->need > 0) {
     int read = SSL_read(state->ssl, state->current, state->need);
 
-    if (read == 0) {
-
-      // TODO: check this logic
-
-      int err = SSL_get_error(state->ssl, read);
-      if (err == SSL_ERROR_ZERO_RETURN) {
-        return 1;
-      }
-
-      return 1;
-    }
-
-    if (read < 0) {
+    if (read <= 0) {
       int err = SSL_get_error(state->ssl, read);
       switch (err) {
 
@@ -558,13 +543,13 @@ void read_cb(uv_stream_t *s, ssize_t nread, const uv_buf_t *buf)
   if (nread > 0) {
 
     // If there's data to read then pass it to OpenSSL via the BIO
-
     // TODO: check return value
+
     BIO_write(state->read_bio, buf->base, nread);
   }
 
   if (nread == UV_EOF) {
-    //    connection_terminate(state->tcp);
+    connection_terminate(state->tcp);
   } else {
     if (do_ssl(state)) {
       write_queued_messages(state);
@@ -609,13 +594,6 @@ void new_connection_cb(uv_stream_t *server, int status)
     return;
   }
 
-  ctx = (SSL_CTX *)server->data;
-  ssl = SSL_new(ctx);
-  if (!ssl) {
-    write_log("Failed to create SSL context");
-    return;
-  }
-
   client = (uv_tcp_t *)malloc(sizeof(uv_tcp_t));
   uv_tcp_init(server->loop, client);
   if (uv_accept(server, (uv_stream_t *)client) != 0) {
@@ -628,6 +606,15 @@ void new_connection_cb(uv_stream_t *server, int status)
   initialize_state(state);
   state->tcp = client;
   set_get_header_state(state);
+
+  ctx = (SSL_CTX *)server->data;
+  ssl = SSL_new(ctx);
+  if (!ssl) {
+    uv_close((uv_handle_t *)client, close_cb);
+    write_log("Failed to create SSL context");
+    return;
+  }
+
   state->ssl = ssl;
 
   // Set up OpenSSL to use a memory BIO. We'll read and write from this BIO
@@ -926,13 +913,6 @@ int main(int argc, char *argv[])
   free(pattern);
   globfree(&g);
 #endif
-
-  // TODO: port this to libuv
-  //
-  //  if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &t, sizeof(int)) == -1) {
-  //  SSL_CTX_free(ctx);
-  //  fatal_error("Failed to set socket option SO_REUSERADDR");
-  // }
 
   loop = uv_loop_new();
   uv_tcp_init(loop, &tcp_server);
