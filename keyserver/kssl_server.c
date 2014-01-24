@@ -372,7 +372,7 @@ void clear_read_queue(connection_state *state)
 void wrote_cb(uv_write_t* req, int status)
 {
   if (req) {
-	free(req);
+    free(req);
   }
 }
 
@@ -385,13 +385,13 @@ int flush_write(connection_state *state)
   int n;
 
   while ((n = BIO_read(state->write_bio, &b[0], BUF_SIZE)) > 0) {
-	uv_write_t *req = (uv_write_t *)malloc(sizeof(uv_write_t));
-	uv_buf_t buf = uv_buf_init(&b[0], n);
+    uv_write_t *req = (uv_write_t *)malloc(sizeof(uv_write_t));
+    uv_buf_t buf = uv_buf_init(&b[0], n);
 
-	int rc = uv_write(req, (uv_stream_t*)state->tcp, &buf, 1, wrote_cb);
-	if (rc < 0) {
-	  return 0;
-	}
+    int rc = uv_write(req, (uv_stream_t*)state->tcp, &buf, 1, wrote_cb);
+    if (rc < 0) {
+      return 0;
+    }
   }
 
   return 1;
@@ -401,19 +401,22 @@ int flush_write(connection_state *state)
 // waiting. Returns 1 if ok, 0 if the connection should be terminated
 int do_ssl(connection_state *state)
 {
+  BYTE *response = NULL;
+  int response_len = 0;
+  kssl_error_code err;
 
   // First determine whether the SSL_accept has completed. If not then any
   // data on the TCP connection is related to the handshake and is not
   // application data.
 
   if (!state->connected) {
-	if (!SSL_is_init_finished(state->ssl)) {
-	  if (SSL_do_handshake(state->ssl) != 1) {
-		return 1;
-	  }
-	}
+  if (!SSL_is_init_finished(state->ssl)) {
+    if (SSL_do_handshake(state->ssl) != 1) {
+      return 1;
+    }
+  }
 
-	state->connected = 1;
+  state->connected = 1;
   }
 
   // Read whatever data needs to be read (controlled by state->need)
@@ -453,13 +456,13 @@ int do_ssl(connection_state *state)
 
       case SSL_ERROR_ZERO_RETURN:
         ERR_clear_error();
-		return 0;
+        return 0;
 
         // Something went wrong so give up on connetion
 
       default:
         log_ssl_error(state->ssl, read);
-		return 0;
+        return 0;
       }
     }
 
@@ -483,7 +486,7 @@ int do_ssl(connection_state *state)
     // processed.
 
     if (state->state == CONNECTION_STATE_GET_HEADER) {
-      kssl_error_code err = parse_header(state->wire_header, &state->header);
+      err = parse_header(state->wire_header, &state->header);
       if (err != KSSL_ERROR_NONE) {
         return 0;
       }
@@ -525,9 +528,7 @@ int do_ssl(connection_state *state)
     // When we reach here state->header is valid and filled in and if
     // necessary state->start points to the payload.
 
-	BYTE *response = NULL;
-	int response_len = 0;
-	kssl_error_code err = kssl_operate(&state->header, state->start, privates, &response, &response_len);
+    err = kssl_operate(&state->header, state->start, privates, &response, &response_len);
     if (err != KSSL_ERROR_NONE) {
       log_err_error();
     } else  {
@@ -556,28 +557,28 @@ void read_cb(uv_stream_t *s, ssize_t nread, const uv_buf_t *buf)
 
   if (nread > 0) {
 
-	// If there's data to read then pass it to OpenSSL via the BIO
+    // If there's data to read then pass it to OpenSSL via the BIO
 
-	// TODO: check return value
-	BIO_write(state->read_bio, buf->base, nread);
+    // TODO: check return value
+    BIO_write(state->read_bio, buf->base, nread);
   }
 
   if (nread == UV_EOF) {
 	//	connection_terminate(state->tcp);
   } else {
-	if (do_ssl(state)) {
-	  write_queued_messages(state);
-	  flush_write(state);
-	} else {
-	  connection_terminate(state->tcp);
-	}
+    if (do_ssl(state)) {
+      write_queued_messages(state);
+      flush_write(state);
+    } else {
+      connection_terminate(state->tcp);
+    }
   }
 
   // Buffer was previously allocated by us in a call to
   // allocate_cb. libuv will not reuse so we must free.
 
   if (buf && buf->base) {
-	free(buf->base);
+    free(buf->base);
   }
 }
 
@@ -588,9 +589,9 @@ void allocate_cb(uv_handle_t *h, size_t s, uv_buf_t *buf)
   buf->base = (char *)malloc(s);
 
   if (buf->base) {
-	buf->len = s;
+    buf->len = s;
   } else {
-	buf->len = 0;
+    buf->len = 0;
   }
 }
 
@@ -598,27 +599,32 @@ void allocate_cb(uv_handle_t *h, size_t s, uv_buf_t *buf)
 // server is ready to read (i.e. there's an incoming connection).
 void new_connection_cb(uv_stream_t *server, int status)
 {
+  SSL_CTX *ctx;
+  SSL *ssl;
+  uv_tcp_t *client;
+  connection_state *state;
+
   if (status == -1) {
-	// TODO: should we log this?
-	return;
+    // TODO: should we log this?
+    return;
   }
 
-  SSL_CTX *ctx = (SSL_CTX *)server->data;
-  SSL *ssl = SSL_new(ctx);
+  ctx = (SSL_CTX *)server->data;
+  ssl = SSL_new(ctx);
   if (!ssl) {
     write_log("Failed to create SSL context");
     return;
   }
 
-  uv_tcp_t *client = (uv_tcp_t *)malloc(sizeof(uv_tcp_t));
+  client = (uv_tcp_t *)malloc(sizeof(uv_tcp_t));
   uv_tcp_init(server->loop, client);
   if (uv_accept(server, (uv_stream_t *)client) != 0) {
-	uv_close((uv_handle_t *)client, close_cb);
-	write_log("Failed to accept TCP connection");
-	return;
+    uv_close((uv_handle_t *)client, close_cb);
+    write_log("Failed to accept TCP connection");
+    return;
   }
 
-  connection_state *state = (connection_state *)malloc(sizeof(connection_state));
+  state = (connection_state *)malloc(sizeof(connection_state));
   initialize_state(state);
   state->tcp = client;
   set_get_header_state(state);
@@ -693,13 +699,13 @@ int main(int argc, char *argv[])
 
   const SSL_METHOD *method;
   SSL_CTX *ctx;
+  char *pattern;
 #if PLATFORM_WINDOWS
   WIN32_FIND_DATA FindFileData;
   HANDLE hFind;
   const char *starkey = "\\*.key";
 #else
   glob_t g;
-  char *pattern;
   const char *starkey = "/*.key";
 #endif
 
@@ -718,9 +724,9 @@ int main(int argc, char *argv[])
     {"ca-file",               required_argument, 0, 5},
     {"silent",                no_argument,       0, 6},
     {"pid-file",              required_argument, 0, 7},
-    {"num-workers",         optional_argument, 0, 8}
+    {"num-workers",           optional_argument, 0, 8}
   };
-
+  optind = 1;
   while (1) {
     int c = getopt_long(argc, argv, "", long_options, 0);
     if (c == -1) {
@@ -852,7 +858,7 @@ int main(int argc, char *argv[])
   strcat(pattern, starkey);
 
 #if PLATFORM_WINDOWS
-  hFind = FindFirstFile(starkey, &FindFileData);
+  hFind = FindFirstFile(pattern, &FindFileData);
   if (hFind == INVALID_HANDLE_VALUE) {
     SSL_CTX_free(ctx);
     fatal_error("Error %d finding private keys in %s", rc, private_key_directory);
@@ -871,13 +877,18 @@ int main(int argc, char *argv[])
     fatal_error("Failed to allocate room for private keys");
   }
 
-  hFind = FindFirstFile(starkey, &FindFileData);
+  hFind = FindFirstFile(pattern, &FindFileData);
   for (i = 0; i < privates_count; ++i) {
-    if (add_key_from_file(FindFileData.cFileName, privates) != 0) {
+    char* path = (char *)malloc(strlen(private_key_directory)+1+strlen(FindFileData.cFileName)+1);
+    strcpy(path, private_key_directory);
+	strcat(path, "\\");
+    strcat(path, FindFileData.cFileName);
+    if (add_key_from_file(path, privates) != 0) {
       SSL_CTX_free(ctx);
       fatal_error("Failed to add private keys");
     }
     FindNextFile(hFind, &FindFileData);
+	free(path);
   }
   FindClose(hFind);
 #else
@@ -929,7 +940,7 @@ int main(int argc, char *argv[])
   addr.sin_family = AF_INET;
   addr.sin_port = htons(port);
   addr.sin_addr.s_addr = INADDR_ANY;
-  bzero(&(addr.sin_zero), 8);
+  memset(&(addr.sin_zero), 0, 8);
 
   if (uv_tcp_bind(&tcp_server, (const struct sockaddr*)&addr, 0) != 0) {
     SSL_CTX_free(ctx);
@@ -963,3 +974,4 @@ int main(int argc, char *argv[])
 
   return 0;
 }
+

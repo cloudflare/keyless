@@ -18,6 +18,7 @@
 #endif
 
 #include <ctype.h>
+#include <uv.h>
 
 #include <openssl/evp.h>
 #include <openssl/ssl.h>
@@ -822,14 +823,12 @@ typedef struct signing_data_ {
   int alg;
 } signing_data;
 
-void *thread_repeat_rsa_sign(void *ptr) {
+void thread_repeat_rsa_sign(void *ptr) {
   signing_data *data = (signing_data*)ptr;
 
   connection *c1 = ssl_connect(data->ctx, data->port);
   kssl_repeat_op_rsa_sign(c1, data->private, data->repeat, data->alg);
   ssl_disconnect(c1);
-
-  return NULL;
 }
 
 int main(int argc, char *argv[])
@@ -842,10 +841,10 @@ int main(int argc, char *argv[])
 
   const SSL_METHOD *method;
   RSA *private;
-  FILE *fp;
+  BIO *bio;
   SSL_CTX *ctx;
   connection *c0, *c1, *c2, *c3, *c;
-  int i, j, k;
+  int i, j;
   int opt;
   struct timeval stop, start;
   int algs[ALGS_COUNT] = {KSSL_OP_RSA_SIGN_MD5SHA1, KSSL_OP_RSA_SIGN_SHA1, KSSL_OP_RSA_SIGN_SHA224,
@@ -860,6 +859,7 @@ int main(int argc, char *argv[])
     {"debug",       no_argument,       0, 6}
   };
 
+  optind = 1;
   while (1) {
     opt = getopt_long(argc, argv, "", long_options, 0);
     if (opt == -1) {
@@ -911,12 +911,11 @@ int main(int argc, char *argv[])
   SSL_load_error_strings();
   method = TLSv1_2_client_method();
 
-  fp = fopen(private_key, "r");
-  if (!fp) {
-    fatal_error("Failed to open private key file %s", private_key);
-  }
-  private = PEM_read_RSAPrivateKey(fp, 0, 0, 0);
-  fclose(fp);
+  bio = BIO_new(BIO_s_file());
+  BIO_read_filename(bio, private_key);
+  private = PEM_read_bio_RSAPrivateKey(bio, 0, 0, 0);
+
+  BIO_free(bio);
   if (!private) {
     ssl_error();
   }
@@ -1104,29 +1103,34 @@ int main(int argc, char *argv[])
           (stop.tv_usec - start.tv_usec) / 1000);
     }
   }
-#if THREADED_TEST
-  // 2 pthreads: currently blocked by openssl thread-safety
-  pthread_t thread[LOOP_COUNT];
-  signing_data data[LOOP_COUNT];
-  for (i = 0; i < ALGS_COUNT; i++) {
-    gettimeofday(&start, NULL);
-    for (j = 0; j < 2; j++) {
-      data[j].ctx = ctx;
-      data[j].private = private;
-      data[j].port = port;
-      data[j].repeat = LOOP_COUNT/2;
-      data[j].alg = algs[i];
-      pthread_create(&thread[j], NULL, thread_repeat_rsa_sign, (void *)&data[j]);
-    }
-    for (j = 0; j < 2; j++) {
-      pthread_join(thread[j], NULL);
-    }
-    gettimeofday(&stop, NULL);
-    printf("\n %d requests %s over 2 threads takes %ld ms\n", LOOP_COUNT, opstring(algs[i]),
+
+  // 2 threads
+  {
+    uv_thread_t thread[LOOP_COUNT];
+    signing_data data[LOOP_COUNT];
+    thread_setup();
+
+    for (i = 0; i < ALGS_COUNT; i++) {
+      gettimeofday(&start, NULL);
+      for (j = 0; j < 2; j++) {
+        data[j].ctx = ctx;
+        data[j].private = private;
+        data[j].port = port;
+        data[j].repeat = LOOP_COUNT/2;
+        data[j].alg = algs[i];
+        uv_thread_create(&thread[j], thread_repeat_rsa_sign, (void *)&data[j]);
+      }
+      for (j = 0; j < 2; j++) {
+        uv_thread_join(&thread[j]);
+      }
+      gettimeofday(&stop, NULL);
+      printf("\n %d requests %s over 2 threads takes %ld ms\n", LOOP_COUNT, opstring(algs[i]),
         (stop.tv_sec - start.tv_sec) * 1000 +
         (stop.tv_usec - start.tv_usec) / 1000);
+    }
+
+    thread_cleanup();
   }
-#endif // THREADED_TEST
 #if !PLATFORM_WINDOWS
   // Test requests over multiple processes
   {

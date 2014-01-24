@@ -167,33 +167,30 @@ void free_pk_list(pk_list list) {
 // occurs. Adds the private key to the list if successful.
 kssl_error_code add_key_from_file(const char *path, // Path to file containing key
                                   pk_list list) {   // Array of private keys from new_pk_list
-  FILE *fp;
+  int rc;
   BIO *bp;
   kssl_error_code err = KSSL_ERROR_NONE;
-
-  fp = fopen(path, "r");
-  if (!fp) {
-    write_log("Failed to open private key file %s", path);
-    return KSSL_ERROR_INTERNAL;
-  }
 
   bp = BIO_new(BIO_s_file());
   if (bp == NULL) {
     ssl_error();
   }
-  BIO_set_fp(bp, fp, BIO_NOCLOSE);
+
+  rc = BIO_read_filename(bp, path);
+  if (!rc) {
+    write_log("Failed to open private key file %s", path);
+    return KSSL_ERROR_INTERNAL;
+  }
   
   err = add_key_from_bio(bp, list);
   if (err != KSSL_ERROR_NONE) {
     write_log("Private RSA key from file %s is not valid", path);
     BIO_free(bp);
-    fclose(fp);
 
     return KSSL_ERROR_INTERNAL;
   }
 
   BIO_free(bp);
-  fclose(fp);
 
   return KSSL_ERROR_NONE;
 }

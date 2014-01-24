@@ -10,6 +10,59 @@
 #define SOCKET_CLOSE close
 #endif
 
+// libuv locking primitives
+#define MUTEX_TYPE            uv_mutex_t
+#define MUTEX_SETUP(x)        uv_mutex_init(&(x))
+#define MUTEX_CLEANUP(x)      uv_mutex_destroy(&(x))
+#define MUTEX_LOCK(x)         uv_mutex_lock(&(x))
+#define MUTEX_UNLOCK(x)       uv_mutex_unlock(&(x))
+#define THREAD_ID             uv_thread_self()
+
+// This array will store all of the mutexes available to OpenSSL.
+static MUTEX_TYPE *mutex_buf=NULL;
+
+static void locking_function(int mode, int n, const char * file, int line)
+{
+  if (mode & CRYPTO_LOCK)
+    MUTEX_LOCK(mutex_buf[n]);
+  else
+    MUTEX_UNLOCK(mutex_buf[n]);
+}
+
+static unsigned long id_function(void)
+{
+  return ((unsigned long)THREAD_ID);
+}
+
+int thread_setup(void)
+{
+  int i;
+
+  mutex_buf = malloc(CRYPTO_num_locks() * sizeof(MUTEX_TYPE));
+  if (!mutex_buf)
+    return 0;
+  for (i = 0;  i < CRYPTO_num_locks(  );  i++)
+    MUTEX_SETUP(mutex_buf[i]);
+  CRYPTO_set_id_callback(id_function);
+  CRYPTO_set_locking_callback(locking_function);
+  return 1;
+}
+
+int thread_cleanup(void)
+{
+  int i;
+  if (!mutex_buf)
+    return 0;
+  CRYPTO_set_id_callback(NULL);
+  CRYPTO_set_locking_callback(NULL);
+  for (i = 0;  i < CRYPTO_num_locks(  );  i++)
+    MUTEX_CLEANUP(mutex_buf[i]);
+  free(mutex_buf);
+  mutex_buf = NULL;
+  return 1;
+}
+
+
 #if __GNUC__
 #include <getopt.h>
 #else
@@ -28,11 +81,11 @@ struct option
 int getopt(int, char**, char*);
 int getopt_long(int, char**, char*, struct option*, int*);
 
-extern int    opterr;  /* if error message should be printed */
-extern int    optind;  /* index into parent argv vector */
-extern int    optopt;  /* character checked for validity */
-extern int    optreset;  /* reset getopt */
-extern char *optarg;  /* argument associated with option */
+int    opterr;  /* if error message should be printed */
+int    optind;  /* index into parent argv vector */
+int    optopt;  /* character checked for validity */
+int    optreset;  /* reset getopt */
+char *optarg;  /* argument associated with option */
 
 #define __P(x) x
 #define _DIAGASSERT(x) assert(x)
