@@ -348,10 +348,62 @@ kssl_error_code parse_message_payload(BYTE *payload,               //
   return KSSL_ERROR_NONE;
 }
 
-// log_operation: write out a KSSL operation to the log
-void log_operation(kssl_operation *op) {
-  time_t result;
-  char ip_string[INET6_ADDRSTRLEN] = {0};
+// opstring: convert a KSSL opcode byte to a string
+const char *opstring(BYTE op) {
+  switch (op) {
+  case KSSL_OP_ERROR:
+    return "KSSL_OP_ERROR";
+  case KSSL_OP_PING:
+    return "KSSL_OP_PING";
+  case KSSL_OP_PONG:
+    return "KSSL_OP_PONG";
+  case KSSL_OP_RSA_DECRYPT:
+    return "KSSL_OP_RSA_DECRYPT";
+  case KSSL_OP_RESPONSE:
+    return "KSSL_OP_RESPONSE";
+  case KSSL_OP_RSA_SIGN_MD5SHA1:
+    return "KSSL_OP_RSA_SIGN_MD5SHA1";
+  case KSSL_OP_RSA_SIGN_SHA1:
+    return "KSSL_OP_RSA_SIGN_SHA1";
+  case KSSL_OP_RSA_SIGN_SHA224:
+    return "KSSL_OP_RSA_SIGN_SHA224";
+  case KSSL_OP_RSA_SIGN_SHA256:
+    return "KSSL_OP_RSA_SIGN_SHA256";
+  case KSSL_OP_RSA_SIGN_SHA384:
+    return "KSSL_OP_RSA_SIGN_SHA384";
+  case KSSL_OP_RSA_SIGN_SHA512:
+    return "KSSL_OP_RSA_SIGN_SHA512";
+  }
+  return "UNKNOWN";
+}
+
+// errstring: convert a KSSL error to a string
+const char *errstring(BYTE err) {
+  switch (err) {
+  case KSSL_ERROR_NONE:
+    return "KSSL_ERROR_NONE";
+  case KSSL_ERROR_CRYPTO_FAILED:
+   return "KSSL_ERROR_CRYPTO_FAILED";
+  case KSSL_ERROR_KEY_NOT_FOUND:
+    return "KSSL_ERROR_KEY_NOT_FOUND";
+  case KSSL_ERROR_READ:
+    return "KSSL_ERROR_READ";
+  case KSSL_ERROR_VERSION_MISMATCH:
+    return "KSSL_ERROR_VERSION_MISMATCH";
+  case KSSL_ERROR_BAD_OPCODE:
+    return "KSSL_ERROR_BAD_OPCODE";
+  case KSSL_ERROR_UNEXPECTED_OPCODE:
+    return "KSSL_ERROR_UNEXPECTED_OPCODE";
+  case KSSL_ERROR_FORMAT:
+    return "KSSL_ERROR_FORMAT";
+  case KSSL_ERROR_INTERNAL:
+    return "KSSL_ERROR_INTERNAL";
+  }
+  return "UNKNOWN";
+}
+
+static void print_ip(kssl_operation *op, char *ip_string) {
+  if (op == NULL) return;
   if (op->is_ip_set) {
     // IPv4 printing
     if (op->ip_len == 4) {
@@ -365,8 +417,26 @@ void log_operation(kssl_operation *op) {
       PRINT_IP(AF_INET6, &ip, ip_string, INET6_ADDRSTRLEN);
     }
   }
-  result = time(NULL);
-  write_log("[access_log] ip <%s>, time %s", ip_string, ctime(&result));
 }
 
+
+// log_operation: write out a KSSL operation to the log
+void log_operation(kssl_header *header, kssl_operation *op) {
+  time_t result;
+  char ip_string[INET6_ADDRSTRLEN] = {0};
+  print_ip(op, ip_string);
+  result = time(NULL);
+  write_log("[access_log] version:%d.%d, id:%d, op:%s, ip <%s>, time %s",
+    header->version_maj, header->version_min, header->id,
+    opstring(op->opcode), ip_string, ctime(&result));
+}
+
+
+// log_error: log an error of the operation
+void log_error(DWORD id, BYTE code) {
+  time_t result;
+  result = time(NULL);
+  write_log("[error_log] id:%d, error:%s, time:%s",
+    id, errstring(code), ctime(&result));
+}
 

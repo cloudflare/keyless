@@ -107,35 +107,6 @@ void test_assert(int a)
 
 int debug = 0;
 
-// opstring: convert a KSSL opcode byte to a string
-static const char * opstring(BYTE op) {
-  switch (op) {
-  case KSSL_OP_ERROR:
-    return "KSSL_OP_ERROR";
-  case KSSL_OP_PING:
-    return "KSSL_OP_PING";
-  case KSSL_OP_PONG:
-    return "KSSL_OP_PONG";
-  case KSSL_OP_RSA_DECRYPT:
-    return "KSSL_OP_RSA_DECRYPT";
-  case KSSL_OP_RESPONSE:
-    return "KSSL_OP_RESPONSE";
-  case KSSL_OP_RSA_SIGN_MD5SHA1:
-    return "KSSL_OP_RSA_SIGN_MD5SHA1";
-  case KSSL_OP_RSA_SIGN_SHA1:
-    return "KSSL_OP_RSA_SIGN_SHA1";
-  case KSSL_OP_RSA_SIGN_SHA224:
-    return "KSSL_OP_RSA_SIGN_SHA224";
-  case KSSL_OP_RSA_SIGN_SHA256:
-    return "KSSL_OP_RSA_SIGN_SHA256";
-  case KSSL_OP_RSA_SIGN_SHA384:
-    return "KSSL_OP_RSA_SIGN_SHA384";
-  case KSSL_OP_RSA_SIGN_SHA512:
-    return "KSSL_OP_RSA_SIGN_SHA512";
-  }
-  return "UNKNOWN";
-}
-
 static void dump_request(kssl_operation *request) {
   BYTE op;
   BYTE *p = request->payload;
