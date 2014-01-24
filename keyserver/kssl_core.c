@@ -42,7 +42,7 @@ kssl_error_code kssl_operate(kssl_header *header,
   }
 
   if (silent == 0) {
-    log_operation(&request);
+    log_operation(header, &request);
   }
 
   switch (request.opcode) {

@@ -88,6 +88,12 @@ kssl_error_code flatten_operation(
   int           *length);   // length of output
 
 // Log a summary of the operation
-void log_operation(kssl_operation *op);
+void log_operation(kssl_header *header, kssl_operation *op);
+
+// Log an error of the operation
+void log_error(DWORD id, BYTE code);
+
+// Map an opcode to the corresponding string
+const char *opstring(BYTE op);
 
 #endif // INCLUDED_KSSL_HELPERS

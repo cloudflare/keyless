@@ -58,7 +58,7 @@ void fatal_error(const char *fmt, ...)
 void log_ssl_error(SSL *ssl, int rc)
 {
   const char *err = ERR_error_string(SSL_get_error(ssl, rc), 0);
-  write_log("SSL error: %s", err);
+  write_verbose_log("SSL error: %s\n", err);
   ERR_clear_error();
 }
 
@@ -66,7 +66,7 @@ void log_ssl_error(SSL *ssl, int rc)
 void log_err_error()
 {
   const char *err = ERR_error_string(ERR_get_error(), 0);
-  write_log("SSL error: %s", err);
+  write_verbose_log("SSL error: %s\n", err);
   ERR_clear_error();
 }
 
@@ -196,7 +196,7 @@ void queue_write(connection_state *state, BYTE *b, int len)
   // sent.
 
   if (state->qr == state->qw) {
-    write_log("Connection state queue full. Data lost.");
+    write_log("[error] Connection state queue full. Data lost.");
     state->qw -= 1;
     free(b);
     if (state->qw == -1) {
@@ -212,6 +212,7 @@ void write_error(connection_state *state, DWORD id, BYTE error)
   BYTE *resp = NULL;
 
   kssl_error_code err = kssl_error(id, error, &resp, &size);
+  log_error(id, error);
   if (err != KSSL_ERROR_INTERNAL) {
     queue_write(state, resp, size);
   }
@@ -479,7 +480,7 @@ int do_ssl(connection_state *state)
       state->start = 0;
 
       if (state->header.version_maj != KSSL_VERSION_MAJ) {
-        write_log("Message version mismatch %02x != %02x\n", state->header.version_maj, KSSL_VERSION_MAJ);
+        write_verbose_log("Message version mismatch %02x != %02x\n", state->header.version_maj, KSSL_VERSION_MAJ);
         write_error(state, state->header.id, KSSL_ERROR_VERSION_MISMATCH);
         clear_read_queue(state);
         free_read_state(state);
@@ -504,7 +505,7 @@ int do_ssl(connection_state *state)
       // This should be unreachable. If this occurs give up processing
       // and reset.
 
-      write_log("Connection in unknown state %d", state->state);
+      write_verbose_log("Connection in unknown state %d\n", state->state);
       free_read_state(state);
       set_get_header_state(state);
       return 1;
@@ -598,7 +599,7 @@ void new_connection_cb(uv_stream_t *server, int status)
   uv_tcp_init(server->loop, client);
   if (uv_accept(server, (uv_stream_t *)client) != 0) {
     uv_close((uv_handle_t *)client, close_cb);
-    write_log("Failed to accept TCP connection");
+    write_log("[error] Failed to accept TCP connection");
     return;
   }
 
@@ -611,7 +612,7 @@ void new_connection_cb(uv_stream_t *server, int status)
   ssl = SSL_new(ctx);
   if (!ssl) {
     uv_close((uv_handle_t *)client, close_cb);
-    write_log("Failed to create SSL context");
+    write_log("[error] Failed to create SSL context");
     return;
   }
 
@@ -710,8 +711,9 @@ int main(int argc, char *argv[])
     {"cipher-list",           required_argument, 0, 4},
     {"ca-file",               required_argument, 0, 5},
     {"silent",                no_argument,       0, 6},
-    {"pid-file",              required_argument, 0, 7},
-    {"num-workers",           optional_argument, 0, 8}
+    {"verbose",               no_argument,       0, 7},
+    {"pid-file",              required_argument, 0, 8},
+    {"num-workers",           optional_argument, 0, 9}
   };
   optind = 1;
   while (1) {
@@ -755,11 +757,15 @@ int main(int argc, char *argv[])
       break;
 
     case 7:
+      verbose = 1;
+      break;
+
+    case 8:
       pid_file = (char *)malloc(strlen(optarg)+1);
       strcpy(pid_file, optarg);
       break;
 
-    case 8:
+    case 9:
       num_workers = atoi(optarg);
       break;
     }
