@@ -1134,6 +1134,7 @@ int main(int argc, char *argv[])
 #if !PLATFORM_WINDOWS
   // Test requests over multiple processes
   {
+	int k;
     int forks[8] = {1, 2, 4, 8, 16, 32, 64, 128};
     pid_t pid[LOOP_COUNT];
     signing_data data[LOOP_COUNT];
