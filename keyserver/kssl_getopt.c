@@ -1,71 +1,15 @@
-// kssl_cli.h: server and testcode helper functions for keyless ssl
+// kssl_getopt.c: command line parsing functions
 //
 // Copyright (c) 2013 CloudFlare, Inc.
 
 #include <assert.h>
 
-#if PLATFORM_WINDOWS
-#define SOCKET_CLOSE closesocket
-#else
-#define SOCKET_CLOSE close
-#endif
-
-// libuv locking primitives
-#define MUTEX_TYPE            uv_mutex_t
-#define MUTEX_SETUP(x)        uv_mutex_init(&(x))
-#define MUTEX_CLEANUP(x)      uv_mutex_destroy(&(x))
-#define MUTEX_LOCK(x)         uv_mutex_lock(&(x))
-#define MUTEX_UNLOCK(x)       uv_mutex_unlock(&(x))
-#define THREAD_ID             uv_thread_self()
-
-// This array will store all of the mutexes available to OpenSSL.
-static MUTEX_TYPE *mutex_buf=NULL;
-
-static void locking_function(int mode, int n, const char * file, int line)
-{
-  if (mode & CRYPTO_LOCK)
-    MUTEX_LOCK(mutex_buf[n]);
-  else
-    MUTEX_UNLOCK(mutex_buf[n]);
-}
-
-static unsigned long id_function(void)
-{
-  return ((unsigned long)THREAD_ID);
-}
-
-int thread_setup(void)
-{
-  int i;
-
-  mutex_buf = malloc(CRYPTO_num_locks() * sizeof(MUTEX_TYPE));
-  if (!mutex_buf)
-    return 0;
-  for (i = 0;  i < CRYPTO_num_locks(  );  i++)
-    MUTEX_SETUP(mutex_buf[i]);
-  CRYPTO_set_id_callback(id_function);
-  CRYPTO_set_locking_callback(locking_function);
-  return 1;
-}
-
-int thread_cleanup(void)
-{
-  int i;
-  if (!mutex_buf)
-    return 0;
-  CRYPTO_set_id_callback(NULL);
-  CRYPTO_set_locking_callback(NULL);
-  for (i = 0;  i < CRYPTO_num_locks(  );  i++)
-    MUTEX_CLEANUP(mutex_buf[i]);
-  free(mutex_buf);
-  mutex_buf = NULL;
-  return 1;
-}
-
-
 #if __GNUC__
-#include <getopt.h>
+
+// If we have GNU then use getopt.h (see kssl_getopt.h)
+
 #else
+
 /*
  * Copyright (c) 2002 Todd C. Miller <Todd.Miller@courtesan.com>
  *
@@ -85,6 +29,7 @@ int thread_cleanup(void)
  * Agency (DARPA) and Air Force Research Laboratory, Air Force
  * Materiel Command, USAF, under agreement number F39502-99-1-0512.
  */
+
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -121,11 +66,10 @@ int thread_cleanup(void)
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-//#include <err.h>
 #include <errno.h>
-//#include <getopt.h>
 #include <stdlib.h>
 #include <string.h>
+
 #include "kssl_log.h"
 
 #define GNU_COMPATIBLE		/* Be more compatible, configure's use us! */
@@ -704,34 +648,34 @@ getopt_long_only(int nargc, char * const *nargv, const char *options,
 #else
   #define DELTA_EPOCH_IN_MICROSECS  11644473600000000ULL
 #endif
- 
-struct timezone 
+
+struct timezone
 {
   int  tz_minuteswest; /* minutes W of Greenwich */
   int  tz_dsttime;     /* type of dst correction */
 };
- 
+
 int gettimeofday(struct timeval *tv, struct timezone *tz)
 {
   FILETIME ft;
   unsigned __int64 tmpres = 0;
   static int tzflag;
- 
+
   if (NULL != tv)
   {
     GetSystemTimeAsFileTime(&ft);
- 
+
     tmpres |= ft.dwHighDateTime;
     tmpres <<= 32;
     tmpres |= ft.dwLowDateTime;
- 
+
     /*converting file time to unix epoch*/
-    tmpres -= DELTA_EPOCH_IN_MICROSECS; 
+    tmpres -= DELTA_EPOCH_IN_MICROSECS;
     tmpres /= 10;  /*convert into microseconds*/
     tv->tv_sec = (long)(tmpres / 1000000UL);
     tv->tv_usec = (long)(tmpres % 1000000UL);
   }
- 
+
   if (NULL != tz)
   {
     if (!tzflag)
@@ -742,8 +686,9 @@ int gettimeofday(struct timeval *tv, struct timezone *tz)
     tz->tz_minuteswest = _timezone / 60;
     tz->tz_dsttime = _daylight;
   }
- 
+
   return 0;
 }
+
 #endif  /* __GNUC__ */
 
