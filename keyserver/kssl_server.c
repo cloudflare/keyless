@@ -27,7 +27,7 @@
 
 #include <stdarg.h>
 
-#include "kssl_cli.h"
+#include "kssl_getopt.h"
 
 #include "kssl_log.h"
 #include "kssl_private_key.h"

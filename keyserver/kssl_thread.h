@@ -1,6 +1,6 @@
-// kssl_core.h: core operation for the keyless ssl
+// kssl_thread.h: header for kssl_thread.c
 //
-// Copyright (c) 2013 CloudFlare, Inc.
+// Copyright (c) 2014 CloudFlare, Inc.
 
 #ifndef INCLUDED_KSSL_THREAD
 #define INCLUDED_KSSL_THREAD 1

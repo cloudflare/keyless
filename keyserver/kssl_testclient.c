@@ -26,11 +26,69 @@
 
 #include <sys/types.h>
 #include <stdarg.h>
-#include "kssl_cli.h"
+
+#include "kssl_getopt.h"
 
 unsigned char ipv6[16] = {0x0, 0xf2, 0x13, 0x48, 0x43, 0x01};
 unsigned char ipv4[4] = {127, 0, 0, 1};
 
+#if PLATFORM_WINDOWS
+#define SOCKET_CLOSE closesocket
+#else
+#define SOCKET_CLOSE close
+#endif
+
+// libuv locking primitives
+#define MUTEX_TYPE            uv_mutex_t
+#define MUTEX_SETUP(x)        uv_mutex_init(&(x))
+#define MUTEX_CLEANUP(x)      uv_mutex_destroy(&(x))
+#define MUTEX_LOCK(x)         uv_mutex_lock(&(x))
+#define MUTEX_UNLOCK(x)       uv_mutex_unlock(&(x))
+#define THREAD_ID             uv_thread_self()
+
+// This array will store all of the mutexes available to OpenSSL.
+static MUTEX_TYPE *mutex_buf=NULL;
+
+static void locking_function(int mode, int n, const char * file, int line)
+{
+  if (mode & CRYPTO_LOCK)
+    MUTEX_LOCK(mutex_buf[n]);
+  else
+    MUTEX_UNLOCK(mutex_buf[n]);
+}
+
+static unsigned long id_function(void)
+{
+  return ((unsigned long)THREAD_ID);
+}
+
+int thread_setup(void)
+{
+  int i;
+
+  mutex_buf = malloc(CRYPTO_num_locks() * sizeof(MUTEX_TYPE));
+  if (!mutex_buf)
+    return 0;
+  for (i = 0;  i < CRYPTO_num_locks(  );  i++)
+    MUTEX_SETUP(mutex_buf[i]);
+  CRYPTO_set_id_callback(id_function);
+  CRYPTO_set_locking_callback(locking_function);
+  return 1;
+}
+
+int thread_cleanup(void)
+{
+  int i;
+  if (!mutex_buf)
+    return 0;
+  CRYPTO_set_id_callback(NULL);
+  CRYPTO_set_locking_callback(NULL);
+  for (i = 0;  i < CRYPTO_num_locks(  );  i++)
+    MUTEX_CLEANUP(mutex_buf[i]);
+  free(mutex_buf);
+  mutex_buf = NULL;
+  return 1;
+}
 
 // ssl_error: call when a fatal SSL error occurs. Exits the program
 // with return code 1.

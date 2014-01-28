@@ -31,7 +31,7 @@ make_dir = $(eval $1.f: ; @mkdir -p $$(dir $$@) ; touch $$@)
 TMP := tmp/
 
 OBJ := o/
-SERVER_OBJS := $(addprefix $(OBJ)kssl_,server.o helpers.o core.o private_key.o log.o thread.o)
+SERVER_OBJS := $(addprefix $(OBJ)kssl_,server.o helpers.o core.o private_key.o log.o thread.o getopt.o)
 TEST_OBJS := $(addprefix $(OBJ)kssl_,helpers.o testclient.o log.o)
 OBJS := $(SERVER_OBJS) $(TEST_OBJS)
 EXECS := $(addprefix $(OBJ)kssl_,server testclient)
