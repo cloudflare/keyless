@@ -885,6 +885,7 @@ int main(int argc, char *argv[])
   STACK_OF(X509_NAME) *cert_names;
   uv_loop_t *loop;
   uv_signal_t sigterm_watcher;
+  ipc_server *p;
 
   const struct option long_options[] = {
     {"port",                  required_argument, 0, 0},
@@ -1151,7 +1152,7 @@ int main(int argc, char *argv[])
   // to threads. Note the 1 in the third parameter of uv_pipe_init:
   // that specifies that this pipe will be used to pass handles.
 
-  ipc_server *p = (ipc_server *)malloc(sizeof(ipc_server));
+  p = (ipc_server *)malloc(sizeof(ipc_server));
   p->connects = num_workers;
   p->server = &tcp_server;
 
