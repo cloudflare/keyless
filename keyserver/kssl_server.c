@@ -546,7 +546,7 @@ int main(int argc, char *argv[])
     fatal_error("Can't bind to port %d", port);
   }
 
-  tcp_server.data = (char *)ctx;
+  tcp_server.data = (void *)ctx;
 
   if (pid_file) {
     FILE *fp = fopen(pid_file, "w");
@@ -621,7 +621,7 @@ int main(int argc, char *argv[])
   // Since we'll be running multiple threads OpenSSL needs mutexes
   // as its state is shared across them.
 
-  locks = malloc(CRYPTO_num_locks() * sizeof(uv_mutex_t));
+  locks = (uv_mutex_t *)malloc(CRYPTO_num_locks() * sizeof(uv_mutex_t));
 
   for ( i = 0; i < CRYPTO_num_locks(); i++) {
     uv_mutex_init(&locks[i]);
