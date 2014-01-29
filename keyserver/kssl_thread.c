@@ -169,7 +169,10 @@ void connection_terminate(uv_tcp_t *tcp)
     SSL_shutdown(ssl);
   }
 
-  uv_read_stop((uv_stream_t *)tcp);
+  rc = uv_read_stop((uv_stream_t *)tcp);
+  if (rc != 0) {
+    write_log("[error] Failed to stop TCP read: %d", rc);
+  }
 
   *(state->prev) = state->next;
   if (state->next) {
@@ -470,6 +473,7 @@ void new_connection_cb(uv_stream_t *server, int status)
   uv_tcp_t *client;
   connection_state *state;
   worker_data *worker = (worker_data *)server->data;
+  int rc;
 
   if (status == -1) {
     // TODO: should we log this?
@@ -478,11 +482,16 @@ void new_connection_cb(uv_stream_t *server, int status)
 
   client = (uv_tcp_t *)malloc(sizeof(uv_tcp_t));
   client->data = NULL;
-  uv_tcp_init(server->loop, client);
-  if (uv_accept(server, (uv_stream_t *)client) != 0) {
-    uv_close((uv_handle_t *)client, close_cb);
-    write_log("[error] Failed to accept TCP connection");
-    return;
+  rc = uv_tcp_init(server->loop, client);
+  if (rc != 0) {
+    write_log("[error] Failed to setup TCP socket on new connection: %d", rc);
+  } else {
+    rc = uv_accept(server, (uv_stream_t *)client);
+    if (rc != 0) {
+      uv_close((uv_handle_t *)client, close_cb);
+      write_log("[error] Failed to accept TCP connection");
+      return;
+    }
   }
 
   // The TCP connection has been accept so now pass it off to a worker
@@ -514,7 +523,11 @@ void new_connection_cb(uv_stream_t *server, int status)
 
   client->data = (void *)state;
 
-  uv_read_start((uv_stream_t*)client, allocate_cb, read_cb);
+  rc = uv_read_start((uv_stream_t*)client, allocate_cb, read_cb);
+  if (rc != 0) {
+    write_log("[error] Failed to start reading on client connection: %d", rc);
+    return;
+  }
 
   // Start accepting the TLS connection. This will likely not
   // complete here and will be completed in the read_cb/do_ssl above.
