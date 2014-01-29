@@ -109,12 +109,14 @@
     <ClInclude Include="kssl.h" />
     <ClInclude Include="kssl_cli.h" />
     <ClInclude Include="kssl_core.h" />
+    <ClInclude Include="kssl_getopt.h" />
     <ClInclude Include="kssl_helpers.h" />
     <ClInclude Include="kssl_log.h" />
     <ClInclude Include="kssl_private_key.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="kssl_core.c" />
+    <ClCompile Include="kssl_getopt.c" />
     <ClCompile Include="kssl_helpers.c" />
     <ClCompile Include="kssl_log.c" />
     <ClCompile Include="kssl_private_key.c" />

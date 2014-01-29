@@ -71,23 +71,8 @@
 #include <string.h>
 
 #include "kssl_log.h"
+#include "kssl_getopt.h"
 
-#define GNU_COMPATIBLE		/* Be more compatible, configure's use us! */
-
-struct option
-{
-  const char *name;
-  int has_arg;
-  int *flag;
-  int val;
-};
-
-#define no_argument 0
-#define required_argument 1
-#define optional_argument 2
-
-int getopt(int, char**, char*);
-int getopt_long(int, char**, char*, struct option*, int*);
 
 #if 1				/* we prefer to keep our getopt(3) */
 #define	REPLACE_GETOPT		/* use this getopt as the system getopt(3) */
