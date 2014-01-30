@@ -95,7 +95,10 @@ uv_tcp_t tcp_server;
 // thread.
 void sigterm_cb(uv_signal_t *w, int signum)
 {
-  uv_signal_stop(w);
+  int rc = uv_signal_stop(w);
+  if (rc != 0) {
+    write_log("[error] Failed to stop SIGTERM handler: %d", rc);
+  }
 }
 
 // thread_stop_cb: called via async_* to stop a thread
@@ -128,8 +131,16 @@ void ipc_read2_cb(uv_pipe_t* pipe,
   ipc_client *client = (ipc_client *)pipe->data;
   uv_loop_t *loop = pipe->loop;
 
-  uv_tcp_init(loop, (uv_tcp_t *)client->handle);
-  uv_accept((uv_stream_t*)&client->pipe, (uv_stream_t *)client->handle);
+  int rc = uv_tcp_init(loop, (uv_tcp_t *)client->handle);
+  if (rc != 0) {
+    write_log("[error] Failed to create TCP handle in thread: %d", rc);
+  } else {
+    rc = uv_accept((uv_stream_t*)&client->pipe, (uv_stream_t *)client->handle);
+    if (rc != 0) {
+      write_log("[error] Failed to uv_accept in thread: %d", rc);
+    }
+  }
+
   uv_close((uv_handle_t*)&client->pipe, NULL);
 }
 
@@ -137,8 +148,11 @@ void ipc_read2_cb(uv_pipe_t* pipe,
 // server. Just reads the TCP server handle.
 void ipc_connect_cb(uv_connect_t* req, int status) {
   ipc_client *client = (ipc_client *)req->data;
-  uv_read2_start((uv_stream_t*)&client->pipe, allocate_cb,
-                 ipc_read2_cb);
+  int rc = uv_read2_start((uv_stream_t*)&client->pipe, allocate_cb,
+                          ipc_read2_cb);
+  if (rc != 0) {
+    write_log("[error] Failed to begin reading on pipe: %d", rc);
+  }
 }
 
 #if PLATFORM_WINDOWS
@@ -147,18 +161,27 @@ void ipc_connect_cb(uv_connect_t* req, int status) {
 #define PIPE_NAME "/tmp/cloudflare-keyless"
 #endif
 
-// get_handle: retrieves the handle of the TCP server.
-void get_handle(uv_loop_t* loop, uv_tcp_t* server) {
+// get_handle: retrieves the handle of the TCP server. Returns 0 on
+// failure.
+int get_handle(uv_loop_t* loop, uv_tcp_t* server) {
   ipc_client *client = (ipc_client *)malloc(sizeof(ipc_client));
-  client->handle = server;
+  int rc;
 
+  client->handle = server;
   client->connect_req.data = (void *)client;
 
-  uv_pipe_init(loop, &client->pipe, 1);
+  rc = uv_pipe_init(loop, &client->pipe, 1);
+  if (rc != 0) {
+    write_log("[error] Failed to initialize client pipe: %d", rc);
+    return 1;
+  }
+
   client->pipe.data = (void *)client;
   uv_pipe_connect(&client->connect_req, &client->pipe,
                   PIPE_NAME, ipc_connect_cb);
   uv_run(loop, UV_RUN_DEFAULT);
+
+  return 0;
 }
 
 // thread_entry: starts a new thread and begins listening for
@@ -167,27 +190,38 @@ void get_handle(uv_loop_t* loop, uv_tcp_t* server) {
 void thread_entry(void *data) {
   worker_data *worker = (worker_data *)data;
   uv_loop_t* loop = uv_loop_new();
+  int rc;
 
   // The stopper is used to terminate the thread gracefully. The
   // uv_unref is here so that if the thread has terminated the
   // async event doesn't keep the loop alive.
 
   worker->stopper.data = (void *)worker;
-  uv_async_init(loop, &worker->stopper, thread_stop_cb);
+  rc = uv_async_init(loop, &worker->stopper, thread_stop_cb);
+  if (rc != 0) {
+    write_log("[error] Failed to create async in thread: %d", rc);
+    uv_loop_delete(loop);
+    return;
+  }
   uv_unref((uv_handle_t*)&worker->stopper);
 
   // Wait for the main thread to be ready and obtain the
   // server handle
 
   uv_sem_wait(&worker->semaphore);
-  get_handle(loop, &worker->server);
+  rc = get_handle(loop, &worker->server);
   uv_sem_post(&worker->semaphore);
 
-  worker->server.data = (void *)worker;
-  worker->active = 0;
+  if (rc == 0) {
+    worker->server.data = (void *)worker;
+    worker->active = 0;
 
-  if (uv_listen((uv_stream_t *)&worker->server, SOMAXCONN,
-                new_connection_cb) == 0) {
+    rc = uv_listen((uv_stream_t *)&worker->server, SOMAXCONN,
+                   new_connection_cb);
+    if (rc != 0) {
+      write_log("[error] Failed to listen on socket in thread: %d", rc);
+    }
+
     uv_run(loop, UV_RUN_DEFAULT);
   }
 
@@ -248,17 +282,29 @@ void ipc_connection_cb(uv_stream_t *pipe, int status) {
   ipc_peer *peer = (ipc_peer *)malloc(sizeof(ipc_peer));
   uv_loop_t *loop = pipe->loop;
   uv_buf_t buf = uv_buf_init("ABCD", 4);
+  int rc;
 
   // Accept the connection on the pipe and immediately write the
   // server handle to it using uv_write2 to send a handle
 
-  uv_pipe_init(loop, (uv_pipe_t*)&peer->pipe, 1);
-  uv_accept(pipe, (uv_stream_t*)&peer->pipe);
-  peer->write_req.data = (void *)peer;
-  peer->pipe.data = (void *)peer;
-  uv_write2(&peer->write_req, (uv_stream_t*)&peer->pipe,
-            &buf, 1, (uv_stream_t*)server->server,
-            ipc_write_cb);
+  rc = uv_pipe_init(loop, (uv_pipe_t*)&peer->pipe, 1);
+  if (rc != 0) {
+    write_log("[error] Failed to create client pipe: %d", rc);
+  } else {
+    rc = uv_accept(pipe, (uv_stream_t*)&peer->pipe);
+    if (rc != 0) {
+      write_log("[error] Failed to accept pipe connection: %d", rc);
+    } else {
+      peer->write_req.data = (void *)peer;
+      peer->pipe.data = (void *)peer;
+      rc = uv_write2(&peer->write_req, (uv_stream_t*)&peer->pipe,
+                     &buf, 1, (uv_stream_t*)server->server,
+                     ipc_write_cb);
+      if (rc != 0) {
+        write_log("[error] Failed to write server handle to pipe: %d", rc);
+      }
+    }
+  }
 
   // Decrement the connection counter. Once this reaches 0 it indicates
   // that every thread has connected and obtained the server handle so
@@ -534,16 +580,22 @@ int main(int argc, char *argv[])
 #endif
 
   loop = uv_loop_new();
-  uv_tcp_init(loop, &tcp_server);
+
+  rc = uv_tcp_init(loop, &tcp_server);
+  if (rc != 0) {
+    SSL_CTX_free(ctx);
+    fatal_error("Failed to create TCP server: %d", rc);
+  }
 
   addr.sin_family = AF_INET;
   addr.sin_port = htons(port);
   addr.sin_addr.s_addr = INADDR_ANY;
   memset(&(addr.sin_zero), 0, 8);
 
-  if (uv_tcp_bind(&tcp_server, (const struct sockaddr*)&addr, 0) != 0) {
+  rc = uv_tcp_bind(&tcp_server, (const struct sockaddr*)&addr, 0);
+  if (rc != 0) {
     SSL_CTX_free(ctx);
-    fatal_error("Can't bind to port %d", port);
+    fatal_error("Can't bind to port %d: %d", port, rc);
   }
 
   tcp_server.data = (void *)ctx;
@@ -563,17 +615,19 @@ int main(int argc, char *argv[])
   // Make the worker threads
 
   for (i = 0; i < num_workers; i++) {
-    if (uv_sem_init(&worker[i].semaphore, 0) != 0) {
+    rc = uv_sem_init(&worker[i].semaphore, 0);
+    if (rc != 0) {
       SSL_CTX_free(ctx);
-      fatal_error("Failed to create semaphore");
+      fatal_error("Failed to create semaphore: %d", rc);
     }
 
     worker[i].ctx = ctx;
 
-    if (uv_thread_create(&worker[i].thread, thread_entry,
-                         &worker[i]) != 0) {
+    rc = uv_thread_create(&worker[i].thread, thread_entry,
+                          &worker[i]);
+    if (rc != 0) {
       SSL_CTX_free(ctx);
-      fatal_error("Failed to create worker thread");
+      fatal_error("Failed to create worker thread: %d", rc);
     }
   }
 
@@ -585,19 +639,22 @@ int main(int argc, char *argv[])
   p->connects = num_workers;
   p->server = &tcp_server;
 
-  if (uv_pipe_init(loop, &p->pipe, 1) != 0) {
+  rc = uv_pipe_init(loop, &p->pipe, 1);
+  if (rc != 0) {
       SSL_CTX_free(ctx);
-      fatal_error("Failed to create pipe");
+      fatal_error("Failed to create parent pipe: %d", rc);
   }
-  if (uv_pipe_bind(&p->pipe, PIPE_NAME) != 0) {
+  rc = uv_pipe_bind(&p->pipe, PIPE_NAME);
+  if (rc != 0) {
       SSL_CTX_free(ctx);
-      fatal_error("Failed to bind pipe to name %s", PIPE_NAME);
+      fatal_error("Failed to bind pipe to name %s: %s", PIPE_NAME, rc);
   }
   p->pipe.data = (void *)p;
-  if (uv_listen((uv_stream_t*)&p->pipe, MAX_WORKERS,
-                ipc_connection_cb) != 0) {
+  rc = uv_listen((uv_stream_t*)&p->pipe, MAX_WORKERS,
+                 ipc_connection_cb);
+  if (rc != 0) {
     SSL_CTX_free(ctx);
-    fatal_error("Failed to listen on pipe");
+    fatal_error("Failed to listen on pipe: %d", rc);
   }
 
   // Pass the tcp_server to all the worker threads and close it
@@ -615,8 +672,16 @@ int main(int argc, char *argv[])
 
   // The main thread will just wait around for SIGTERM
 
-  uv_signal_init(loop, &sigterm_watcher);
-  uv_signal_start(&sigterm_watcher, sigterm_cb, SIGTERM);
+  rc = uv_signal_init(loop, &sigterm_watcher);
+  if (rc != 0) {
+    SSL_CTX_free(ctx);
+    fatal_error("Failed to create SIGTERM watcher: %d", rc);
+  }
+  rc = uv_signal_start(&sigterm_watcher, sigterm_cb, SIGTERM);
+  if (rc != 0) {
+    SSL_CTX_free(ctx);
+    fatal_error("Failed to start SIGTERM watcher: %d", rc);
+  }
 
   // Since we'll be running multiple threads OpenSSL needs mutexes
   // as its state is shared across them.
@@ -624,7 +689,11 @@ int main(int argc, char *argv[])
   locks = (uv_mutex_t *)malloc(CRYPTO_num_locks() * sizeof(uv_mutex_t));
 
   for ( i = 0; i < CRYPTO_num_locks(); i++) {
-    uv_mutex_init(&locks[i]);
+    rc = uv_mutex_init(&locks[i]);
+    if (rc != 0) {
+      SSL_CTX_free(ctx);
+      fatal_error("Failed to create mutex: %d", rc);
+    }
   }
 
   CRYPTO_set_id_callback(thread_id_cb);
@@ -635,8 +704,14 @@ int main(int argc, char *argv[])
   // Now clean up all the running threads
 
   for (i = 0; i < num_workers; i++) {
-    uv_async_send(&worker[i].stopper);
-    uv_thread_join(&worker[i].thread);
+    rc = uv_async_send(&worker[i].stopper);
+    if (rc != 0) {
+      write_log("[error] Failed to send stop async message: %d", rc);
+    }
+    rc = uv_thread_join(&worker[i].thread);
+    if (rc != 0) {
+      write_log("[error] Thread join failed: %d", rc);
+    }
     uv_sem_destroy(&worker[i].semaphore);
   }
 

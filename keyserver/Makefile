@@ -128,7 +128,7 @@ test: all
 	@$(MAKE) --no-print-directory run VALGRIND=$(VALGRIND) PORT=$(PORT)
 	@perl -e 'while (!-e "$(PID_FILE)") { sleep(1); }'
 	@sleep 1
-	@$(OBJ)kssl_testclient --port=$(PORT) --private-key=keys/private.key --client-cert=client-cert/cert.pem --client-key=client-cert/key.pem --ca-file=$(CA_FILE) $(DEBUG)
+	@$(OBJ)kssl_testclient --port=$(PORT) --private-key=keys/private.key --client-cert=client-cert/cert.pem --client-key=client-cert/key.pem --ca-file=$(CA_FILE) $(DEBUG) --server=localhost
 ifeq ($(VALGRIND),1)
 	@$(MAKE) --no-print-directory kill
 	@echo valgrind log in $(VALGRIND_LOG)
