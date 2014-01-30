@@ -46,6 +46,8 @@ unsigned char ipv4[4] = {127, 0, 0, 1};
 #define MUTEX_UNLOCK(x)       uv_mutex_unlock(&(x))
 #define THREAD_ID             uv_thread_self()
 
+char *server = 0;
+
 // This array will store all of the mutexes available to OpenSSL.
 static MUTEX_TYPE *mutex_buf=NULL;
 
@@ -758,7 +760,7 @@ connection *ssl_connect(SSL_CTX *ctx, int port)
     fatal_error("Can't create TCP socket");
   }
 
-  localhost = gethostbyname("localhost");
+  localhost = gethostbyname(server);
   if (!localhost) {
     fatal_error("Could not look up address of localhost");
   }
@@ -886,7 +888,8 @@ int main(int argc, char *argv[])
     {"client-cert", required_argument, 0, 2},
     {"client-key",  required_argument, 0, 3},
     {"ca-file",     required_argument, 0, 4},
-    {"debug",       no_argument,       0, 6}
+    {"debug",       no_argument,       0, 5},
+    {"server",      required_argument, 0, 6}
   };
 
   optind = 1;
@@ -924,6 +927,11 @@ int main(int argc, char *argv[])
     case 5:
       debug = 1;
       break;
+
+    case 6:
+      server = (char *)malloc(strlen(optarg)+1);
+      strcpy(server, optarg);
+      break;
     }
   }
 
@@ -935,6 +943,9 @@ int main(int argc, char *argv[])
   }
   if (!client_cert) {
     fatal_error("The --client-cert parameter must be specified with a sign client certificate file name");
+  }
+  if (!server) {
+    fatal_error("The --server must be specified");
   }
 
   SSL_library_init();
