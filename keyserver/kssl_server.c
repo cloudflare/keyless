@@ -372,7 +372,8 @@ int main(int argc, char *argv[])
     {"silent",                no_argument,       0, 6},
     {"verbose",               no_argument,       0, 7},
     {"pid-file",              required_argument, 0, 8},
-    {"num-workers",           optional_argument, 0, 9}
+    {"num-workers",           optional_argument, 0, 9},
+    {0,                       0,                 0, 0}
   };
   optind = 1;
   while (1) {
