@@ -2,65 +2,69 @@ Keyserver Configuration
 -----------------------
 
 This is the keyserver for Keyless SSL. It consists of a single binary
-file 'keyserver' that has the following command-line options:
+file 'kssl_server' that has the following command-line options:
 
-  --port    The TCP port on which to listen for connections. These
-            connections must be TLSv1.2.
+    --port
+              The TCP port on which to listen for connections. These
+              connections must be TLSv1.2.
 
-  --ca-file Path to a PEM-encoded file containing the CA certificate
-            used to sign client certificates presented on connection.
+     --ca-file
 
-  --server-cert
-  --server-key
-            Path to PEM-encoded files containing the certificate and
-            private key that are used when a connection is made to the
-            server. These must be signed by an authority that the client
-            side recognizes (e.g. the same CA as --ca-file).
+              Path to a PEM-encoded file containing the CA certificate
+              used to sign client certificates presented on connection.
 
-  --cipher-list
-            An OpenSSL list of ciphers that the TLS server will accept
-            for connections. e.g. ECDHE-RSA-AES128-SHA256:RC4:HIGH:!MD5
+    --server-cert
+    --server-key
 
-  --private-key-directory
-            Path to a directory containing private keys which the keyserver
-            provides decoding service against. The key files must end with
-            ".key" and be PEM-encoded. There should be no trailing / on 
-            the path.
+              Path to PEM-encoded files containing the certificate and
+              private key that are used when a connection is made to the
+              server. These must be signed by an authority that the client
+              side recognizes (e.g. the same CA as --ca-file).
 
-  --silent  Prevents keyserver from producing any output on stdout or stderr
-            unless a fatal error occurs on start-up
+    --cipher-list
 
-  --pid-file
-            (optional) Path to a file into which the PID of the keyserver.
-            This file is only written if the keyserver starts successfully.
+              An OpenSSL list of ciphers that the TLS server will accept
+              for connections. e.g. ECDHE-RSA-AES128-SHA256:RC4:HIGH:!MD5
+
+    --private-key-directory
+
+              Path to a directory containing private keys which the keyserver
+              provides decoding service against. The key files must end with
+              ".key" and be PEM-encoded. There should be no trailing / on 
+              the path.
+
+    --silent
+              Prevents keyserver from producing any output on stdout or stderr
+              unless a fatal error occurs on start-up
+
+    --pid-file
+
+              (optional) Path to a file into which the PID of the keyserver.
+              This file is only written if the keyserver starts successfully.
 
 For example,
 
-  keyserver --port=6543                        \
-            --server-cert=server-cert/cert.pem \
-            --server-key=server-cert/key.pem   \
-            --private-key-directory=keys       \
-            --cipher-list=ECDHE-RSA-AES128-SHA256:AES128-GCM-SHA256:RC4:HIGH:!MD5:!aNULL:!EDH \
-            --ca-file=CA/cacert.pem            \
-            --pid-file=keyserver.pid
-
+    keyserver --port=24008                       \
+              --server-cert=server-cert/cert.pem \
+              --server-key=server-cert/key.pem   \
+              --private-key-directory=keys       \
+              --cipher-list=ECDHE-RSA-AES128-SHA256:AES128-GCM-SHA256:RC4:HIGH:!MD5:!aNULL:!EDH \
+              --ca-file=CA/cacert.pem            \
+              --pid-file=keyserver.pid
 
 Makefile Targets
 ----------------
 
 The Makefile has the following useful targets:
 
-  all     The default target that builds both the keyserver and the testclient
+    all     The default target that builds both the keyserver and the testclient
 
-  clean   Deletes the keyserver, testclient and related object files
+    clean   Deletes the keyserver, testclient and related object files
 
-  run     Runs the keyserver with a configuration suitable for testing (with
-          the testclient)
+    run     Runs the keyserver with a configuration suitable for testing (with
+            the testclient)
 
-  kill    Stops the keyserver started by 'make run'
+    kill    Stops the keyserver started by 'make run'
 
-  test    Runs the testclient against the keyserver (which must be started with
-          'make run' beforehand).
-
-
-  
+    test    Runs the testclient against the keyserver (which must be started with
+            'make run' beforehand).  
