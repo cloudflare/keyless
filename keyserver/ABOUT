@@ -24,7 +24,7 @@ Header:
     0 - - 1 - - 2 - - 3 - - 4 - - - - 6 - - 7 - - 8
     | Maj | Min |   Length  |          ID           |
     |                    Body                       |
-    |   Body       | <- 8 + Length
+    |     Body     | <- 8 + Length
 
 Item:
 
@@ -32,56 +32,54 @@ Item:
     | Tag |   Length  |          Data               |
     |           Data             | <- 3 + Length
 
-
-All numbers are in network order (big endian).
+All numbers are in network byte order (big endian).
 
 The following tag values are possible for items:
 
-0x01 - Certificate Digest,
-0x02 - Server Name Indication,
-0x03 - Client's IP address,
-0x11 - Opcode,
-0x12 - Payload,
+    0x01 - Certificate Digest,
+    0x02 - Server Name Indication,
+    0x03 - Client's IP address,
+    0x11 - Opcode,
+    0x12 - Payload,
 
 A requests contains a header and the following items:
 
-0x01 - length: 32 bytes, data: SHA256 of RSA modulus
-0x02 - length: variable, data: SNI string
-0x03 - length: 4 or 16 bytes, data: IPv4/6 address
-0x11 - length: 1, data: opcode describing operation
-0x12 - length: variable, data: payload to sign or encrypt
+    0x01 - length: 32 bytes, data: SHA256 of RSA modulus
+    0x02 - length: variable, data: SNI string
+    0x03 - length: 4 or 16 bytes, data: IPv4/6 address
+    0x11 - length: 1, data: opcode describing operation
+    0x12 - length: variable, data: payload to sign or encrypt
 
 The following opcodes are supported in the opcode item:
 
-0x01 - operation: RSA decrypt payload 
-0x02 - operation: RSA sign MD5SHA1
-0x03 - operation: RSA sign SHA1
-0x04 - operation: RSA sign SHA224
-0x05 - operation: RSA sign SHA256
-0x06 - operation: RSA sign SHA384
-0x07 - operation: RSA sign SHA512
+    0x01 - operation: RSA decrypt payload 
+    0x02 - operation: RSA sign MD5SHA1
+    0x03 - operation: RSA sign SHA1
+    0x04 - operation: RSA sign SHA224
+    0x05 - operation: RSA sign SHA256
+    0x06 - operation: RSA sign SHA384
+    0x07 - operation: RSA sign SHA512
 
 Responses contain a header with a matching ID and only two items:
 
-0x11 - length: 1, data: opcode describing operation status
-0x12 - length: variable, data: payload response
+    0x11 - length: 1, data: opcode describing operation status
+    0x12 - length: variable, data: payload response
 
 The following opcodes are supported in the opcode item:
 
-0xF0 - operation: success, payload: modified payload
-0xFF - operation: RSA decrypt payload, payload: 
+    0xF0 - operation: success, payload: modified payload
+    0xFF - operation: RSA decrypt payload, payload: 
 
 On an error, these are the possible 1-byte payloads:
 
-0x01 - cryptography failure
-0x02 - key not found - no matching certificate ID
-0x03 - read error - disk read failure
-0x04 - version mismatch - unsupported version incorrect
-0x05 - bad opcode - use of unknown opcode in request
-0x06 - unexpected opcode - use of response opcode in request
-0x07 - format error - malformed message
-0x08 - internal error - memory or other internal error
-
+    0x01 - cryptography failure
+    0x02 - key not found - no matching certificate ID
+    0x03 - read error - disk read failure
+    0x04 - version mismatch - unsupported version incorrect
+    0x05 - bad opcode - use of unknown opcode in request
+    0x06 - unexpected opcode - use of response opcode in request
+    0x07 - format error - malformed message
+    0x08 - internal error - memory or other internal error
 
 Key Management
 --------------
@@ -93,17 +91,18 @@ the client and the server need a TLS 1.2 compatible key pair.
 The server will need a valid key and certificate pair in PEM format.
 The following options are required and take a path to these files:
 
-* --server-cert 
-* --server-key
+     --server-cert 
+     --server-key
 
 The private keys that this server is able to use should be stored in
 PEM format in a directory denoted by the option:
---private-key-directory
+
+    --private-key-directory
 
 In order to authenticate the client'certificate, a custom CA file is
 required.  This CA file is provided by CloudFlare and provided with:
---ca-file
 
+    --ca-file
 
 Code Organization
 -----------------
@@ -111,28 +110,28 @@ Code Organization
 The code is split into several files by function in order to enable
 swapping with custom implementations.
 
-kssl.h: contains the shared constants and structures
-kssl_core.h: APIs for performing the keyless operation
-kssl_helpers.h: APIs for serialization and parsing functions
-kssl_private_key.h: APIs for storing and matching private keys
-kssl_log.h: APIs for writing logs
+    kssl.h              contains the shared constants and structures
+    kssl_core.h         APIs for performing the keyless operation
+    kssl_helpers.h      APIs for serialization and parsing functions
+    kssl_private_key.h  APIs for storing and matching private keys
+    kssl_log.h          APIs for writing logs
 
-kssl_server.c: sample server implementation with openssl and libev
-kssl_testclient.c: client implementation with openssl
+    kssl_server.c       sample server implementation with openssl and libuv
+    kssl_testclient.c   client implementation with openssl
 
 The following files are reference implementations of the APIs above.
 
-kssl_core.c: implementation of v1.0 policy for keyless operation
-kssl_helpers.c: implementation of v1 serialization and parsing
-kssl_private_key.c: implementation of reading, storage and operations of private keys using openssl
-kssl_log.c: implementation of logging to stderr
-
+    kssl_core.c         implementation of v1.0 policy for keyless operation
+    kssl_helpers.c      implementation of v1 serialization and parsing
+    kssl_private_key.c  implementation of reading, storage and operations of
+                        private keys using openssl
+    kssl_log.c          implementation of logging to stderr
 
 Building and Dependencies
 -------------------------
 
 The Keyless SSL server implementation has two external dependencies,
-OpenSSL and libev.  These are open source and available for most
+OpenSSL and libuv.  These are open source and available for most
 platforms.
 
 For Unix-based systems, the server and test suite are built with a
@@ -146,10 +145,9 @@ Result:
 
     o/kssl_testclient o/kssl_server
 
-To automatically test:
+To test:
 
     make test
-
 
 Recommended Settings
 --------------------
@@ -157,6 +155,4 @@ Recommended Settings
 The kssl_server command line options determine configuration.
 
 The recommended value for cipher-list is: ECDHE-RSA-AES128-SHA256
-
-The recommended port is 24008
-
+The recommended port is: 24008
