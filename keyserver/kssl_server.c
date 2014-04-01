@@ -485,7 +485,7 @@ For example,\n\
               --server-cert=server-cert/cert.pem \\\n\
               --server-key=server-cert/key.pem   \\\n\
               --private-key-directory=keys       \\\n\
-              --cipher-list=ECDHE-RSA-AES128-SHA256:AES128-GCM-SHA256:RC4:HIGH:!MD5:!NULL:!EDH \\\n\
+              --cipher-list=ECDHE-RSA-AES128-SHA256:AES128-GCM-SHA256:RC4:HIGH:!MD5:!aNULL:!EDH \\\n\
               --ca-file=CA/cacert.pem            \\\n\
               --pid-file=keyserver.pid\n\
 ");
