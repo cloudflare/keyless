@@ -26,7 +26,6 @@
 #include <openssl/engine.h>
 
 #include <stdarg.h>
-#include <stdbool.h>
 
 #include "kssl_getopt.h"
 
@@ -340,7 +339,7 @@ void locking_cb(int mode, int type, const char *file, int line) {
 int main(int argc, char *argv[])
 {
   int port = -1;
-  bool help = false;
+  int help = 0;
   char *server_cert = 0;
   char *server_key = 0;
   char *private_key_directory = 0;
@@ -437,12 +436,12 @@ int main(int argc, char *argv[])
       break;
 
     case 10:
-      help = true;
+      help = 1;
       break;
     }
   }
 
-  if (help || argc < 7) {
+  if (help || (argc < 7)) {
     printf("Usage: %s [OPTIONS]\n", PROGRAM_NAME);
     fatal_error("\n\
 Options:\n\
