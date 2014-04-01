@@ -143,7 +143,7 @@ $(OBJ):
 $(OBJ)kssl_server: $(SERVER_OBJS) ; @$(LINK.o) $^ $(LOADLIBES) $(LDLIBS) -o $@
 $(OBJ)kssl_testclient: $(TEST_OBJS) ; @$(LINK.o) $^ $(LOADLIBES) $(LDLIBS) -o $@
 
-$(OBJ)%.o: %.c ; @$(COMPILE.c) $(CFLAGS) $(OUTPUT_OPTION) $<
+$(OBJ)%.o: %.c ; @$(COMPILE.c) $(OUTPUT_OPTION) $<
 
 $(OBJ)kssl_server.o: kssl.h
 $(OBJ)kssl_testclient.o: kssl.h
