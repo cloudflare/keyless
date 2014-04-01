@@ -26,6 +26,7 @@
 #include <openssl/engine.h>
 
 #include <stdarg.h>
+#include <stdbool.h>
 
 #include "kssl_getopt.h"
 
@@ -33,6 +34,9 @@
 #include "kssl_private_key.h"
 #include "kssl_core.h"
 #include "kssl_thread.h"
+
+// This defines argv[0] without the calling path
+#define PROGRAM_NAME "kssl_server"
 
 // ssl_error: call when a fatal SSL error occurs. Exits the program
 // with return code 1.
@@ -336,6 +340,7 @@ void locking_cb(int mode, int type, const char *file, int line) {
 int main(int argc, char *argv[])
 {
   int port = -1;
+  bool help = false;
   char *server_cert = 0;
   char *server_key = 0;
   char *private_key_directory = 0;
@@ -373,8 +378,10 @@ int main(int argc, char *argv[])
     {"verbose",               no_argument,       0, 7},
     {"pid-file",              required_argument, 0, 8},
     {"num-workers",           optional_argument, 0, 9},
+    {"help",                  no_argument,       0, 10},
     {0,                       0,                 0, 0}
   };
+
   optind = 1;
   while (1) {
     int c = getopt_long(argc, argv, "", long_options, 0);
@@ -428,9 +435,61 @@ int main(int argc, char *argv[])
     case 9:
       num_workers = atoi(optarg);
       break;
+
+    case 10:
+      help = true;
+      break;
     }
   }
 
+  if (help || argc < 7) {
+    printf("Usage: %s [OPTIONS]\n", PROGRAM_NAME);
+    fatal_error("\n\
+Options:\n\
+  --port\n\
+            The TCP port on which to listen for connections. These\n\
+            connections must be TLSv1.2.\n\
+\n\
+  --ca-file\n\
+            Path to a PEM-encoded file containing the CA certificate\n\
+            used to sign client certificates presented on connection.\n\
+\n\
+  --server-cert\n\
+  --server-key\n\
+            Path to PEM-encoded files containing the certificate and\n\
+            private key that are used when a connection is made to the\n\
+            server. These must be signed by an authority that the client\n\
+            side recognizes (e.g. the same CA as --ca-file).\n\
+\n\
+  --cipher-list\n\
+            An OpenSSL list of ciphers that the TLS server will accept\n\
+            for connections. e.g. ECDHE-RSA-AES128-SHA256:RC4:HIGH:!MD5\n\
+\n\
+  --private-key-directory\n\
+            Path to a directory containing private keys which the keyserver\n\
+            provides decoding service against. The key files must end with\n\
+            \".key\" and be PEM-encoded. There should be no trailing / on\n\
+            the path.\n\
+\n\
+  --silent\n\
+            Prevents keyserver from producing any output on stdout or stderr\n\
+            unless a fatal error occurs on start-up\n\
+\n\
+  --pid-file\n\
+            (optional) Path to a file into which the PID of the keyserver.\n\
+            This file is only written if the keyserver starts successfully.\n\
+\n\
+For example,\n\
+\n\
+  kssl_server --port=24008                       \\\n\
+              --server-cert=server-cert/cert.pem \\\n\
+              --server-key=server-cert/key.pem   \\\n\
+              --private-key-directory=keys       \\\n\
+              --cipher-list=ECDHE-RSA-AES128-SHA256:AES128-GCM-SHA256:RC4:HIGH:!MD5:!NULL:!EDH \\\n\
+              --ca-file=CA/cacert.pem            \\\n\
+              --pid-file=keyserver.pid\n\
+");
+  }
   if (port == -1) {
     fatal_error("The --port parameter must be specified with the listen port");
   }
