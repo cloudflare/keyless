@@ -171,7 +171,8 @@ void connection_terminate(uv_tcp_t *tcp)
 
   rc = uv_read_stop((uv_stream_t *)tcp);
   if (rc != 0) {
-    write_log("[error] Failed to stop TCP read: %d", rc);
+    write_log("[error] Failed to stop TCP read: %s", 
+              error_string(rc));
   }
 
   *(state->prev) = state->next;
@@ -484,12 +485,14 @@ void new_connection_cb(uv_stream_t *server, int status)
   client->data = NULL;
   rc = uv_tcp_init(server->loop, client);
   if (rc != 0) {
-    write_log("[error] Failed to setup TCP socket on new connection: %d", rc);
+    write_log("[error] Failed to setup TCP socket on new connection: %s", 
+              error_string(rc));
   } else {
     rc = uv_accept(server, (uv_stream_t *)client);
     if (rc != 0) {
       uv_close((uv_handle_t *)client, close_cb);
-      write_log("[error] Failed to accept TCP connection");
+      write_log("[error] Failed to accept TCP connection: %s",
+                error_string(rc));
       return;
     }
   }
@@ -525,7 +528,8 @@ void new_connection_cb(uv_stream_t *server, int status)
 
   rc = uv_read_start((uv_stream_t*)client, allocate_cb, read_cb);
   if (rc != 0) {
-    write_log("[error] Failed to start reading on client connection: %d", rc);
+    write_log("[error] Failed to start reading on client connection: %s", 
+              error_string(rc));
     return;
   }
 

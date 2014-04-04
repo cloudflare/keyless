@@ -96,4 +96,7 @@ void log_error(DWORD id, BYTE code);
 // Map an opcode to the corresponding string
 const char *opstring(BYTE op);
 
+// Map an error code to a string
+const char * error_string(int e);
+
 #endif // INCLUDED_KSSL_HELPERS
