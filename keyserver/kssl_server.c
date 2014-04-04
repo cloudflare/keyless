@@ -113,6 +113,7 @@ uv_tcp_t tcp_server;
 void sigterm_cb(uv_signal_t *w, int signum)
 {
   int rc = uv_signal_stop(w);
+  uv_close((uv_handle_t *)w, NULL);
   if (rc != 0) {
     write_log("[error] Failed to stop SIGTERM handler: %s",
               error_string(rc));
@@ -255,7 +256,6 @@ void thread_entry(void *data) {
 // cleanup: cleanup state.
 void cleanup(uv_loop_t *loop, SSL_CTX *ctx, pk_list privates)
 {
-  uv_loop_delete(loop);
   SSL_CTX_free(ctx);
 
   free_pk_list(privates);
@@ -270,6 +270,8 @@ void cleanup(uv_loop_t *loop, SSL_CTX *ctx, pk_list privates)
   CRYPTO_cleanup_all_ex_data();
   ERR_remove_state(0);
   ERR_free_strings();
+
+  uv_loop_delete(loop);
 }
 
 typedef struct {
