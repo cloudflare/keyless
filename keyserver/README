@@ -8,6 +8,10 @@ file 'kssl_server' that has the following command-line options:
               The TCP port on which to listen for connections. These
               connections must be TLSv1.2.
 
+     --ip     
+              (optional) The IP address of the interface to bind to.
+              If missing binds to all available interfaces.
+    
      --ca-file
 
               Path to a PEM-encoded file containing the CA certificate
