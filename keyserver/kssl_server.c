@@ -378,8 +378,15 @@ int main(int argc, char *argv[])
     {"pid-file",              required_argument, 0, 8},
     {"num-workers",           optional_argument, 0, 9},
     {"help",                  no_argument,       0, 10},
+    {"ip",                    optional_argument, 0, 11},
     {0,                       0,                 0, 0}
   };
+
+
+  // This is set up here because it may be overriden by the --ip option which
+  // is about to be parsed. That option is optional and this sets the default.
+
+  addr.sin_addr.s_addr = INADDR_ANY;
 
   optind = 1;
   while (1) {
@@ -438,6 +445,12 @@ int main(int argc, char *argv[])
     case 10:
       help = 1;
       break;
+
+    case 11:
+      if (inet_pton(AF_INET, optarg, &addr.sin_addr) != 1) {
+        fatal_error("The --ip parameter must be a valid IPv4 address");
+      }
+      break;
     }
   }
 
@@ -448,6 +461,10 @@ Options:\n\
   --port\n\
             The TCP port on which to listen for connections. These\n\
             connections must be TLSv1.2.\n\
+\n\
+  --ip\n\
+              (optional) The IP address of the interface to bind to.\n\
+              If missing binds to all available interfaces.\n\
 \n\
   --ca-file\n\
             Path to a PEM-encoded file containing the CA certificate\n\
@@ -648,7 +665,6 @@ For example,\n\
 
   addr.sin_family = AF_INET;
   addr.sin_port = htons(port);
-  addr.sin_addr.s_addr = INADDR_ANY;
   memset(&(addr.sin_zero), 0, 8);
 
   rc = uv_tcp_bind(&tcp_server, (const struct sockaddr*)&addr, 0);
