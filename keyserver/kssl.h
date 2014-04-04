@@ -1,6 +1,6 @@
 // kssl.h: definitions for the Keyless SSL protocol
 //
-// Copyright (c) 2013 CloudFlare, Inc.
+// Copyright (c) 2013-2014 CloudFlare, Inc.
 
 #ifndef INCLUDED_KSSL
 #define INCLUDED_KSSL 1
