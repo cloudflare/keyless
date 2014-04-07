@@ -121,7 +121,7 @@ void sigterm_cb(uv_signal_t *w, int signum)
 }
 
 // thread_stop_cb: called via async_* to stop a thread
-void thread_stop_cb(uv_async_t* handle, int status) {
+void thread_stop_cb(uv_async_t* handle) {
   worker_data *worker = (worker_data *)handle->data;
 
   uv_close((uv_handle_t*)&worker->server, NULL);
@@ -143,23 +143,33 @@ void ipc_client_close_cb(uv_handle_t *handle) {
 
 // ipc_read2_cb: data (the TCP server handle) ready to read on the pipe.
 // Read the handle and close the pipe.
-void ipc_read2_cb(uv_pipe_t* pipe,
+void ipc_read2_cb(uv_stream_t* handle,
                   ssize_t nread,
-                  const uv_buf_t* buf,
-                  uv_handle_type type) {
-  ipc_client *client = (ipc_client *)pipe->data;
+                  const uv_buf_t* buf) {
+  uv_pipe_t *pipe = (uv_pipe_t*)handle;
   uv_loop_t *loop = pipe->loop;
+  ipc_client *client = (ipc_client *)pipe->data;
 
-  int rc = uv_tcp_init(loop, (uv_tcp_t *)client->handle);
-  if (rc != 0) {
-    write_log("[error] Failed to create TCP handle in thread: %s", 
-              error_string(rc));
-  } else {
-    rc = uv_accept((uv_stream_t*)&client->pipe, (uv_stream_t *)client->handle);
-    if (rc != 0) {
-      write_log("[error] Failed to uv_accept in thread: %s",
-                error_string(rc));
+  if (uv_pipe_pending_count(pipe) == 1) {
+    uv_handle_type type = uv_pipe_pending_type(pipe);
+
+    if (type == UV_TCP) {
+      int rc = uv_tcp_init(loop, client->handle);
+      if (rc != 0) {
+	write_log("[error] Failed to create TCP handle in thread: %s", 
+		  error_string(rc));
+      } else {
+	rc = uv_accept(handle, (uv_stream_t *)client->handle);
+	if (rc != 0) {
+	  write_log("[error] Failed to uv_accept in thread: %s",
+		    error_string(rc));
+	}
+      }
+    } else {
+      write_log("[error] Wrong handle type in IPC");
     }
+  } else {
+      write_log("[error] No handles despite ipc_read_cb");
   }
 
   uv_close((uv_handle_t*)&client->pipe, NULL);
@@ -169,7 +179,7 @@ void ipc_read2_cb(uv_pipe_t* pipe,
 // server. Just reads the TCP server handle.
 void ipc_connect_cb(uv_connect_t* req, int status) {
   ipc_client *client = (ipc_client *)req->data;
-  int rc = uv_read2_start((uv_stream_t*)&client->pipe, allocate_cb,
+  int rc = uv_read_start((uv_stream_t*)&client->pipe, allocate_cb,
                           ipc_read2_cb);
   if (rc != 0) {
     write_log("[error] Failed to begin reading on pipe: %s",

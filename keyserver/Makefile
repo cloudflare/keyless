@@ -13,7 +13,7 @@ CFLAGS += -g -Wall -Wextra -Wno-unused-parameter -Werror -I.
 
 # Link against OpenSSL and libuv
 
-LDLIBS := -lcrypto -lssl -luv -L.
+LDLIBS := -lcrypto -lssl -luv -lrt -L.
 
 # This Makefile makes use of the GNU Make Standard Library project
 # which can be found at http://gmsl.sf.net/
