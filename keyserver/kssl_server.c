@@ -414,7 +414,7 @@ int main(int argc, char *argv[])
     {"pid-file",              required_argument, 0, 8},
     {"num-workers",           optional_argument, 0, 9},
     {"help",                  no_argument,       0, 10},
-    {"ip",                    optional_argument, 0, 11},
+    {"ip",                    required_argument, 0, 11},
     {0,                       0,                 0, 0}
   };
 
