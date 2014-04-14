@@ -888,8 +888,8 @@ int main(int argc, char *argv[])
     {"client-key",  required_argument, 0, 3},
     {"ca-file",     required_argument, 0, 4},
     {"debug",       no_argument,       0, 5},
-    {"server",      required_argument, 0, 6}
-    {"short",       no_argument,       0, 7},
+    {"server",      required_argument, 0, 6},
+    {"short",       no_argument,       0, 7}
   };
 
   optind = 1;
@@ -935,7 +935,7 @@ int main(int argc, char *argv[])
       
     case 7:
       health = 1;
-      break
+      break;
     }
   }
 
