@@ -48,6 +48,10 @@ unsigned char ipv4[4] = {127, 0, 0, 1};
 
 char *server = 0;
 
+int tests = 0;
+int debug = 0;
+int short = 0;
+
 // This array will store all of the mutexes available to OpenSSL.
 static MUTEX_TYPE *mutex_buf=NULL;
 
@@ -152,9 +156,6 @@ void test(const char *fmt, ...)
   va_end(l);
 }
 
-
-int tests = 0;
-
 // test_assert: assert that some condition is true, fatal
 // error if not
 void test_assert(int a)
@@ -164,8 +165,6 @@ void test_assert(int a)
   }
   tests += 1;
 }
-
-int debug = 0;
 
 static void dump_request(kssl_operation *request) {
   BYTE op;
@@ -890,6 +889,7 @@ int main(int argc, char *argv[])
     {"ca-file",     required_argument, 0, 4},
     {"debug",       no_argument,       0, 5},
     {"server",      required_argument, 0, 6}
+    {"short",       no_argument,       0, 7},
   };
 
   optind = 1;
@@ -932,6 +932,10 @@ int main(int argc, char *argv[])
       server = (char *)malloc(strlen(optarg)+1);
       strcpy(server, optarg);
       break;
+      
+    case 7:
+      short = 1;
+      break
     }
   }
 
@@ -1106,106 +1110,108 @@ int main(int argc, char *argv[])
   kssl_repeat_op_ping(c3, 18);
   ssl_disconnect(c3);
 
-  {
-    // Compute timing for various operations
-    #define LOOP_COUNT 1000
-    c1 = ssl_connect(ctx, port);
-    for (i = 0; i < ALGS_COUNT; i++) {
-      gettimeofday(&start, NULL);
-      kssl_repeat_op_rsa_sign(c1, private, LOOP_COUNT, algs[i]);
-      gettimeofday(&stop, NULL);
-      printf("\n %d sequential %s takes %ld ms\n", LOOP_COUNT, opstring(algs[i]),
-          (stop.tv_sec - start.tv_sec) * 1000 +
-          (stop.tv_usec - start.tv_usec) / 1000);
-    }
-    ssl_disconnect(c1);
-
-    for (i = 0; i < ALGS_COUNT; i++) {
-      gettimeofday(&start, NULL);
+  if (!short) {
+    {
+      // Compute timing for various operations
+      #define LOOP_COUNT 1000
       c1 = ssl_connect(ctx, port);
-      kssl_repeat_op_rsa_sign(c1, private, LOOP_COUNT, algs[i]);
-      ssl_disconnect(c1);
-      gettimeofday(&stop, NULL);
-      printf("\n %d sequential %s with one connection takes %ld ms\n", LOOP_COUNT, opstring(algs[i]),
-          (stop.tv_sec - start.tv_sec) * 1000 +
-          (stop.tv_usec - start.tv_usec) / 1000);
-    }
-
-    for (i = 0; i < ALGS_COUNT; i++) {
-      gettimeofday(&start, NULL);
-      for (j = 0; j < LOOP_COUNT/10; j++) {
-        c1 = ssl_connect(ctx, port);
-        kssl_repeat_op_rsa_sign(c1, private, 10, algs[i]);
-        ssl_disconnect(c1);
-      }
-      gettimeofday(&stop, NULL);
-      printf("\n %d sequential %s with 10 requests per re-connection takes %ld ms\n", LOOP_COUNT, opstring(algs[i]),
-          (stop.tv_sec - start.tv_sec) * 1000 +
-          (stop.tv_usec - start.tv_usec) / 1000);
-    }
-  }
-
-  // 2 threads
-  {
-    uv_thread_t thread[LOOP_COUNT];
-    signing_data data[LOOP_COUNT];
-    thread_setup();
-
-    for (i = 0; i < ALGS_COUNT; i++) {
-      gettimeofday(&start, NULL);
-      for (j = 0; j < 2; j++) {
-        data[j].ctx = ctx;
-        data[j].private = private;
-        data[j].port = port;
-        data[j].repeat = LOOP_COUNT/2;
-        data[j].alg = algs[i];
-        uv_thread_create(&thread[j], thread_repeat_rsa_sign, (void *)&data[j]);
-      }
-      for (j = 0; j < 2; j++) {
-        uv_thread_join(&thread[j]);
-      }
-      gettimeofday(&stop, NULL);
-      printf("\n %d requests %s over 2 threads takes %ld ms\n", LOOP_COUNT, opstring(algs[i]),
-        (stop.tv_sec - start.tv_sec) * 1000 +
-        (stop.tv_usec - start.tv_usec) / 1000);
-    }
-
-    thread_cleanup();
-  }
-#if !PLATFORM_WINDOWS
-  // Test requests over multiple processes
-  {
-    int k;
-    int forks[8] = {1, 2, 4, 8, 16, 32, 64, 128};
-    pid_t pid[LOOP_COUNT];
-    signing_data data[LOOP_COUNT];
-    for (k = 0; k < 8; k++) {
       for (i = 0; i < ALGS_COUNT; i++) {
         gettimeofday(&start, NULL);
-        for (j = 0; j < forks[k]; j++) {
-          data[j].ctx = ctx;
-          data[j].private = private;
-          data[j].port = port;
-          data[j].repeat = LOOP_COUNT / forks[k];
-          data[j].alg = algs[i];
-          pid[j] = fork();
-          if (pid[j] == 0) {
-            thread_repeat_rsa_sign((void *)&data[j]);
-            exit(0);
-          }
-        }
-        for (j = 0; j < forks[k]; j++) {
-          waitpid(pid[j], NULL, 0);
+        kssl_repeat_op_rsa_sign(c1, private, LOOP_COUNT, algs[i]);
+        gettimeofday(&stop, NULL);
+        printf("\n %d sequential %s takes %ld ms\n", LOOP_COUNT, opstring(algs[i]),
+            (stop.tv_sec - start.tv_sec) * 1000 +
+            (stop.tv_usec - start.tv_usec) / 1000);
+      }
+      ssl_disconnect(c1);
+
+      for (i = 0; i < ALGS_COUNT; i++) {
+        gettimeofday(&start, NULL);
+        c1 = ssl_connect(ctx, port);
+        kssl_repeat_op_rsa_sign(c1, private, LOOP_COUNT, algs[i]);
+        ssl_disconnect(c1);
+        gettimeofday(&stop, NULL);
+        printf("\n %d sequential %s with one connection takes %ld ms\n", LOOP_COUNT, opstring(algs[i]),
+            (stop.tv_sec - start.tv_sec) * 1000 +
+            (stop.tv_usec - start.tv_usec) / 1000);
+      }
+
+      for (i = 0; i < ALGS_COUNT; i++) {
+        gettimeofday(&start, NULL);
+        for (j = 0; j < LOOP_COUNT/10; j++) {
+          c1 = ssl_connect(ctx, port);
+          kssl_repeat_op_rsa_sign(c1, private, 10, algs[i]);
+          ssl_disconnect(c1);
         }
         gettimeofday(&stop, NULL);
-        printf("\n %d requests %s over %d forks takes %ld ms\n", LOOP_COUNT,
-            opstring(algs[i]), forks[k],
+        printf("\n %d sequential %s with 10 requests per re-connection takes %ld ms\n", LOOP_COUNT, opstring(algs[i]),
             (stop.tv_sec - start.tv_sec) * 1000 +
             (stop.tv_usec - start.tv_usec) / 1000);
       }
     }
-  }
+
+    // 2 threads
+    {
+      uv_thread_t thread[LOOP_COUNT];
+      signing_data data[LOOP_COUNT];
+      thread_setup();
+
+      for (i = 0; i < ALGS_COUNT; i++) {
+        gettimeofday(&start, NULL);
+        for (j = 0; j < 2; j++) {
+          data[j].ctx = ctx;
+          data[j].private = private;
+          data[j].port = port;
+          data[j].repeat = LOOP_COUNT/2;
+          data[j].alg = algs[i];
+          uv_thread_create(&thread[j], thread_repeat_rsa_sign, (void *)&data[j]);
+        }
+        for (j = 0; j < 2; j++) {
+          uv_thread_join(&thread[j]);
+        }
+        gettimeofday(&stop, NULL);
+        printf("\n %d requests %s over 2 threads takes %ld ms\n", LOOP_COUNT, opstring(algs[i]),
+          (stop.tv_sec - start.tv_sec) * 1000 +
+          (stop.tv_usec - start.tv_usec) / 1000);
+      }
+
+      thread_cleanup();
+    }
+#if !PLATFORM_WINDOWS
+    // Test requests over multiple processes
+    {
+      int k;
+      int forks[8] = {1, 2, 4, 8, 16, 32, 64, 128};
+      pid_t pid[LOOP_COUNT];
+      signing_data data[LOOP_COUNT];
+      for (k = 0; k < 8; k++) {
+        for (i = 0; i < ALGS_COUNT; i++) {
+          gettimeofday(&start, NULL);
+          for (j = 0; j < forks[k]; j++) {
+            data[j].ctx = ctx;
+            data[j].private = private;
+            data[j].port = port;
+            data[j].repeat = LOOP_COUNT / forks[k];
+            data[j].alg = algs[i];
+            pid[j] = fork();
+            if (pid[j] == 0) {
+              thread_repeat_rsa_sign((void *)&data[j]);
+              exit(0);
+            }
+          }
+          for (j = 0; j < forks[k]; j++) {
+            waitpid(pid[j], NULL, 0);
+          }
+          gettimeofday(&stop, NULL);
+          printf("\n %d requests %s over %d forks takes %ld ms\n", LOOP_COUNT,
+              opstring(algs[i]), forks[k],
+              (stop.tv_sec - start.tv_sec) * 1000 +
+              (stop.tv_usec - start.tv_usec) / 1000);
+        }
+      }
+    }
 #endif // PLATFORM_WINDOWS
+  }
 
   goto skip;
 
