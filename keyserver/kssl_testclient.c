@@ -50,7 +50,7 @@ char *server = 0;
 
 int tests = 0;
 int debug = 0;
-int short = 0;
+int health = 0;
 
 // This array will store all of the mutexes available to OpenSSL.
 static MUTEX_TYPE *mutex_buf=NULL;
@@ -934,7 +934,7 @@ int main(int argc, char *argv[])
       break;
       
     case 7:
-      short = 1;
+      health = 1;
       break
     }
   }
@@ -1110,7 +1110,7 @@ int main(int argc, char *argv[])
   kssl_repeat_op_ping(c3, 18);
   ssl_disconnect(c3);
 
-  if (!short) {
+  if (!health) {
     {
       // Compute timing for various operations
       #define LOOP_COUNT 1000
