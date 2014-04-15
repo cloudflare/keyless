@@ -1,6 +1,45 @@
 // kssl_testclient.c: test program to communicate with a keyserver
 //
-// Copyright (c) 2013 CloudFlare, Inc.
+// Copyright (c) 2013-2014 CloudFlare, Inc.
+//
+// Command-line options:
+//
+// --port
+//
+// TCP port to contact the kssl_server on (matches the --port parameter of
+// kssl_server)
+//
+// --server
+//
+// Hostname or IP of the kssl_server.
+//
+// --client-cert
+// --client-key
+//
+// The filenames of a client certificate to present to the server to verify
+// that this client is a valid user of kssl_server. These must be signed by a
+// CA that kssl_server can check the certificate against (i.e one in the
+// --ca-file parameter of kssl_server).
+//
+// --ca-file
+//
+// Path to a PEM-encoded file containing the CA certificate used to verify
+// server certificates presented on connection.
+// 
+// --private-key
+//
+// The filename of an RSA private key file (PEM encoded) that is used for
+// testing. This must be one of the private keys specified in the
+// kssl_server's --private-key-directory.
+//
+// --debug
+//
+// Turns in debug logging
+//
+// --short
+//
+// Instead of performing all the tests this simply checks connectivity with
+// the kssl_server by running a limit number of tests.
 
 #include "kssl.h"
 #include "kssl_helpers.h"
@@ -946,7 +985,7 @@ int main(int argc, char *argv[])
     fatal_error("The --private-key parameter must be specified with the path to private key file which contains the public key to be used for encryption");
   }
   if (!client_cert) {
-    fatal_error("The --client-cert parameter must be specified with a sign client certificate file name");
+    fatal_error("The --client-cert parameter must be specified with a signed client certificate file name");
   }
   if (!server) {
     fatal_error("The --server must be specified");
