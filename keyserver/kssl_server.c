@@ -15,6 +15,8 @@
 #include <netinet/ip.h>
 #include <getopt.h>
 #include <glob.h>
+#include <pwd.h>
+#include <grp.h>
 #endif
 #include <fcntl.h>
 #include <uv.h>
@@ -393,6 +395,8 @@ int main(int argc, char *argv[])
 #else
   glob_t g;
   const char *starkey = "/*.key";
+  char *usergroup = 0;
+  int daemon = 0;
 #endif
 
   int rc, privates_count, i;
@@ -415,6 +419,10 @@ int main(int argc, char *argv[])
     {"num-workers",           optional_argument, 0, 9},
     {"help",                  no_argument,       0, 10},
     {"ip",                    required_argument, 0, 11},
+#if PLATFORM_WINDOWS == 0
+    {"user",                  required_argument, 0, 12},
+    {"daemon",                no_argument,       0, 13},
+#endif
     {0,                       0,                 0, 0}
   };
 
@@ -487,6 +495,69 @@ int main(int argc, char *argv[])
         fatal_error("The --ip parameter must be a valid IPv4 address");
       }
       break;
+
+#if PLATFORM_WINDOWS == 0
+
+      // The --user parameter can be in the form username:group or
+      // username. The latter will be equivalent to username:username.
+
+    case 12:
+      if (geteuid() == 0) {
+        char *user;
+        char *group;
+        struct passwd * pwd;
+        struct group * grp;
+        
+        usergroup = (char *)malloc(strlen(optarg)+1);
+        strcpy(usergroup, optarg);
+        user = usergroup;
+        group = strstr(user, ":");
+        if (group == 0) {
+          group = user;
+        } else {
+          *group = '\0';
+          group += 1;
+          
+          // This is checking for a : at the end of the parameter (e.g.
+          // username:) and treats it as username:username
+          
+          if (*group == '\0') {
+            group = 0;
+          }
+        }
+          
+        // Verify that the user and group are valid and obtain the IDs that
+        // will be necessary for switching to them.
+        
+        pwd = getpwnam(user);
+        if (pwd == 0) {
+          fatal_error("Unable to find user %s", user);
+        }
+        
+        grp = getgrnam(group);
+        if (grp == 0) {
+          fatal_error("Unable to find group %s", group);
+        }
+        
+        if (setgid(grp->gr_gid) == -1) {
+          fatal_error("Failed to set group %d (%s)", grp->gr_gid, group);
+        }
+        if (initgroups(user, grp->gr_gid) == -1) {
+          fatal_error("Failed to initgroups %d (%s)", grp->gr_gid, user);
+        }
+        if (setuid(pwd->pw_uid) == -1) {
+          fatal_error("Failed to set user %d (%s)", pwd->pw_uid, user);
+        }
+      } else {
+        fatal_error("The --user can only be used by the root user");
+      }
+      break;
+
+  case 13:
+    daemon = 1;
+    break;
+
+#endif
     }
   }
 
@@ -531,6 +602,14 @@ Options:\n\
             (optional) Path to a file into which the PID of the keyserver.\n\
             This file is only written if the keyserver starts successfully.\n\
 \n\
+  --user\n\
+            (optional) user:group to switch to. Can be in the form user:group\n\
+            or just user (in which case user:user is implied) (UNIX only;\n\
+            root only)\n\
+\n\
+  --daemon\n\
+            (optional) Forks and abandons the parent process. (UNIX only)\n\
+\n\
 For example,\n\
 \n\
   kssl_server --port=24008                       \\\n\
@@ -560,6 +639,15 @@ For example,\n\
   if (num_workers <= 0 || num_workers > MAX_WORKERS) {
     fatal_error("The --num-workers parameter must between 1 and %d", MAX_WORKERS);
   }
+
+#if PLATFORM_WINDOWS == 0
+
+  if (daemon) {
+    if (fork() != 0) {
+      return 0;
+    }
+  }
+#endif
 
   SSL_library_init();
   SSL_load_error_strings();
@@ -843,6 +931,8 @@ For example,\n\
     uv_mutex_destroy(&locks[i]);
   }
   free(locks);
+
+  free(usergroup);
 
   return 0;
 }
