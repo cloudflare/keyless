@@ -38,13 +38,41 @@ file 'kssl_server' that has the following command-line options:
               the path.
 
     --silent
-              Prevents keyserver from producing any output on stdout or stderr
-              unless a fatal error occurs on start-up
+              Prevents keyserver from producing any log output. Fatal
+              start up errors are sent to stderr.
+
+    --verbose 
+
+              Enables verbose logging. When enabled access log data is
+              sent to the logger as well as errors.
+
+    --num-workers
+
+              (optional) The number of worker threads to start. Each worker
+              thread will handle a single connection from a KSSL client. 
+              Defaults to 1.
 
     --pid-file
 
               (optional) Path to a file into which the PID of the keyserver.
               This file is only written if the keyserver starts successfully.
+
+
+The following options are not available on Windows systems:
+
+    --user
+
+            (optional) user:group to switch to. Can be in the form user:group
+            or just user (in which case user:user is implied) (root only)
+
+    --daemon
+
+            (optional) Forks and abandons the parent process.
+
+    --syslog
+
+            (optional) Log lines are sent to syslog (instead of stdout
+            or stderr). 
 
 For example,
 
@@ -61,14 +89,14 @@ Makefile Targets
 
 The Makefile has the following useful targets:
 
-    all     The default target that builds both the keyserver and the testclient
+    all     The default target that builds both the keyserver and
+            the testclient
 
     clean   Deletes the keyserver, testclient and related object files
 
-    run     Runs the keyserver with a configuration suitable for testing (with
-            the testclient)
+    run     Runs the keyserver with a configuration suitable for testing
+            (with the testclient)
 
     kill    Stops the keyserver started by 'make run'
 
-    test    Runs the testclient against the keyserver (which must be started with
-            'make run' beforehand).  
+    test    Runs the testclient against the keyserver.
