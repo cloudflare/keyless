@@ -77,7 +77,7 @@ void queue_write(connection_state *state, BYTE *b, int len)
   // sent.
 
   if (state->qr == state->qw) {
-    write_log("[error] Connection state queue full. Data lost.");
+    write_log(1, "Connection state queue full. Data lost.");
     state->qw -= 1;
     free(b);
     if (state->qw == -1) {
@@ -171,7 +171,7 @@ void connection_terminate(uv_tcp_t *tcp)
 
   rc = uv_read_stop((uv_stream_t *)tcp);
   if (rc != 0) {
-    write_log("[error] Failed to stop TCP read: %s", 
+    write_log(1, "Failed to stop TCP read: %s", 
               error_string(rc));
   }
 
@@ -365,7 +365,8 @@ int do_ssl(connection_state *state)
       state->start = 0;
 
       if (state->header.version_maj != KSSL_VERSION_MAJ) {
-        write_verbose_log("Message version mismatch %02x != %02x\n", state->header.version_maj, KSSL_VERSION_MAJ);
+        write_log(1, "Message version mismatch %02x != %02x",
+                  state->header.version_maj, KSSL_VERSION_MAJ);
         write_error(state, state->header.id, KSSL_ERROR_VERSION_MISMATCH);
         clear_read_queue(state);
         free_read_state(state);
@@ -390,7 +391,7 @@ int do_ssl(connection_state *state)
       // This should be unreachable. If this occurs give up processing
       // and reset.
 
-      write_verbose_log("Connection in unknown state %d\n", state->state);
+      write_log(1, "Connection in unknown state %d", state->state);
       free_read_state(state);
       set_get_header_state(state);
       return 1;
@@ -485,13 +486,13 @@ void new_connection_cb(uv_stream_t *server, int status)
   client->data = NULL;
   rc = uv_tcp_init(server->loop, client);
   if (rc != 0) {
-    write_log("[error] Failed to setup TCP socket on new connection: %s", 
+    write_log(1, "Failed to setup TCP socket on new connection: %s", 
               error_string(rc));
   } else {
     rc = uv_accept(server, (uv_stream_t *)client);
     if (rc != 0) {
       uv_close((uv_handle_t *)client, close_cb);
-      write_log("[error] Failed to accept TCP connection: %s",
+      write_log(1, "Failed to accept TCP connection: %s",
                 error_string(rc));
       return;
     }
@@ -508,7 +509,7 @@ void new_connection_cb(uv_stream_t *server, int status)
   ssl = SSL_new(worker->ctx);
   if (!ssl) {
     uv_close((uv_handle_t *)client, close_cb);
-    write_log("[error] Failed to create SSL context");
+    write_log(1, "Failed to create SSL context");
     return;
   }
 
@@ -528,7 +529,7 @@ void new_connection_cb(uv_stream_t *server, int status)
 
   rc = uv_read_start((uv_stream_t*)client, allocate_cb, read_cb);
   if (rc != 0) {
-    write_log("[error] Failed to start reading on client connection: %s", 
+    write_log(1, "Failed to start reading on client connection: %s", 
               error_string(rc));
     return;
   }

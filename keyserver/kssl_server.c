@@ -15,6 +15,8 @@
 #include <netinet/ip.h>
 #include <getopt.h>
 #include <glob.h>
+#include <pwd.h>
+#include <grp.h>
 #endif
 #include <fcntl.h>
 #include <uv.h>
@@ -62,7 +64,7 @@ void fatal_error(const char *fmt, ...)
 void log_ssl_error(SSL *ssl, int rc)
 {
   const char *err = ERR_error_string(SSL_get_error(ssl, rc), 0);
-  write_verbose_log("SSL error: %s\n", err);
+  write_log(1, "SSL error: %s", err);
   ERR_clear_error();
 }
 
@@ -70,7 +72,7 @@ void log_ssl_error(SSL *ssl, int rc)
 void log_err_error()
 {
   const char *err = ERR_error_string(ERR_get_error(), 0);
-  write_verbose_log("SSL error: %s\n", err);
+  write_log(1, "SSL error: %s", err);
   ERR_clear_error();
 }
 
@@ -115,7 +117,7 @@ void sigterm_cb(uv_signal_t *w, int signum)
   int rc = uv_signal_stop(w);
   uv_close((uv_handle_t *)w, NULL);
   if (rc != 0) {
-    write_log("[error] Failed to stop SIGTERM handler: %s",
+    write_log(1, "Failed to stop SIGTERM handler: %s",
               error_string(rc));
   }
 }
@@ -156,20 +158,20 @@ void ipc_read2_cb(uv_stream_t* handle,
     if (type == UV_TCP) {
       int rc = uv_tcp_init(loop, client->handle);
       if (rc != 0) {
-	write_log("[error] Failed to create TCP handle in thread: %s", 
+	write_log(1, "Failed to create TCP handle in thread: %s", 
 		  error_string(rc));
       } else {
 	rc = uv_accept(handle, (uv_stream_t *)client->handle);
 	if (rc != 0) {
-	  write_log("[error] Failed to uv_accept in thread: %s",
+	  write_log(1, "Failed to uv_accept in thread: %s",
 		    error_string(rc));
 	}
       }
     } else {
-      write_log("[error] Wrong handle type in IPC");
+      write_log(1, "Wrong handle type in IPC");
     }
   } else {
-      write_log("[error] No handles despite ipc_read_cb");
+      write_log(1, "No handles despite ipc_read_cb");
   }
 
   uv_close((uv_handle_t*)&client->pipe, NULL);
@@ -182,7 +184,7 @@ void ipc_connect_cb(uv_connect_t* req, int status) {
   int rc = uv_read_start((uv_stream_t*)&client->pipe, allocate_cb,
                           ipc_read2_cb);
   if (rc != 0) {
-    write_log("[error] Failed to begin reading on pipe: %s",
+    write_log(1, "Failed to begin reading on pipe: %s",
               error_string(rc));
   }
 }
@@ -204,7 +206,7 @@ int get_handle(uv_loop_t* loop, uv_tcp_t* server) {
 
   rc = uv_pipe_init(loop, &client->pipe, 1);
   if (rc != 0) {
-    write_log("[error] Failed to initialize client pipe: %s",
+    write_log(1, "Failed to initialize client pipe: %s",
               error_string(rc));
     return 1;
   }
@@ -232,7 +234,7 @@ void thread_entry(void *data) {
   worker->stopper.data = (void *)worker;
   rc = uv_async_init(loop, &worker->stopper, thread_stop_cb);
   if (rc != 0) {
-    write_log("[error] Failed to create async in thread: %s",
+    write_log(1, "Failed to create async in thread: %s",
               error_string(rc));
     uv_loop_delete(loop);
     return;
@@ -253,7 +255,7 @@ void thread_entry(void *data) {
     rc = uv_listen((uv_stream_t *)&worker->server, SOMAXCONN,
                    new_connection_cb);
     if (rc != 0) {
-      write_log("[error] Failed to listen on socket in thread: %s",
+      write_log(1, "Failed to listen on socket in thread: %s",
                 error_string(rc));
     }
 
@@ -325,12 +327,12 @@ void ipc_connection_cb(uv_stream_t *pipe, int status) {
 
   rc = uv_pipe_init(loop, (uv_pipe_t*)&peer->pipe, 1);
   if (rc != 0) {
-    write_log("[error] Failed to create client pipe: %s", 
+    write_log(1, "Failed to create client pipe: %s", 
               error_string(rc));
   } else {
     rc = uv_accept(pipe, (uv_stream_t*)&peer->pipe);
     if (rc != 0) {
-      write_log("[error] Failed to accept pipe connection: %s", 
+      write_log(1, "Failed to accept pipe connection: %s", 
                 error_string(rc));
     } else {
       peer->write_req.data = (void *)peer;
@@ -339,7 +341,7 @@ void ipc_connection_cb(uv_stream_t *pipe, int status) {
                      &buf, 1, (uv_stream_t*)server->server,
                      ipc_write_cb);
       if (rc != 0) {
-        write_log("[error] Failed to write server handle to pipe: %s", 
+        write_log(1, "Failed to write server handle to pipe: %s", 
                   error_string(rc));
       }
     }
@@ -382,6 +384,7 @@ int main(int argc, char *argv[])
   char *cipher_list = 0;
   char *ca_file = 0;
   char *pid_file = 0;
+  int parsed;
 
   const SSL_METHOD *method;
   SSL_CTX *ctx;
@@ -393,6 +396,8 @@ int main(int argc, char *argv[])
 #else
   glob_t g;
   const char *starkey = "/*.key";
+  char *usergroup = 0;
+  int daemon = 0;
 #endif
 
   int rc, privates_count, i;
@@ -415,6 +420,11 @@ int main(int argc, char *argv[])
     {"num-workers",           optional_argument, 0, 9},
     {"help",                  no_argument,       0, 10},
     {"ip",                    required_argument, 0, 11},
+#if PLATFORM_WINDOWS == 0
+    {"user",                  required_argument, 0, 12},
+    {"daemon",                no_argument,       0, 13},
+    {"syslog",                no_argument,       0, 14},
+#endif
     {0,                       0,                 0, 0}
   };
 
@@ -424,14 +434,18 @@ int main(int argc, char *argv[])
 
   addr.sin_addr.s_addr = INADDR_ANY;
 
+  parsed = 0;
   optind = 1;
-  while (1) {
-    int c = getopt_long(argc, argv, "", long_options, 0);
-    if (c == -1) {
+  while (!parsed) {
+    switch (getopt_long(argc, argv, "", long_options, 0)) {
+    case -1:
+      parsed = 1;
       break;
-    }
 
-    switch (c) {
+    case '?':
+      return 1;
+      break;
+
     case 0:
       port = atoi(optarg);
       break;
@@ -487,6 +501,73 @@ int main(int argc, char *argv[])
         fatal_error("The --ip parameter must be a valid IPv4 address");
       }
       break;
+
+#if PLATFORM_WINDOWS == 0
+
+      // The --user parameter can be in the form username:group or
+      // username. The latter will be equivalent to username:username.
+
+    case 12:
+      if (geteuid() == 0) {
+        char *user;
+        char *group;
+        struct passwd * pwd;
+        struct group * grp;
+        
+        usergroup = (char *)malloc(strlen(optarg)+1);
+        strcpy(usergroup, optarg);
+        user = usergroup;
+        group = strstr(user, ":");
+        if (group == 0) {
+          group = user;
+        } else {
+          *group = '\0';
+          group += 1;
+          
+          // This is checking for a : at the end of the parameter (e.g.
+          // username:) and treats it as username:username
+          
+          if (*group == '\0') {
+            group = 0;
+          }
+        }
+          
+        // Verify that the user and group are valid and obtain the IDs that
+        // will be necessary for switching to them.
+        
+        pwd = getpwnam(user);
+        if (pwd == 0) {
+          fatal_error("Unable to find user %s", user);
+        }
+        
+        grp = getgrnam(group);
+        if (grp == 0) {
+          fatal_error("Unable to find group %s", group);
+        }
+        
+        if (setgid(grp->gr_gid) == -1) {
+          fatal_error("Failed to set group %d (%s)", grp->gr_gid, group);
+        }
+        if (initgroups(user, grp->gr_gid) == -1) {
+          fatal_error("Failed to initgroups %d (%s)", grp->gr_gid, user);
+        }
+        if (setuid(pwd->pw_uid) == -1) {
+          fatal_error("Failed to set user %d (%s)", pwd->pw_uid, user);
+        }
+      } else {
+        fatal_error("The --user can only be used by the root user");
+      }
+      break;
+
+    case 13:
+      daemon = 1;
+      break;
+
+    case 14:
+      use_syslog = 1;
+      break;
+
+#endif
     }
   }
 
@@ -525,11 +606,19 @@ Options:\n\
 \n\
   --silent\n\
             Prevents keyserver from producing any output on stdout or stderr\n\
-            unless a fatal error occurs on start-up\n\
+            unless a fatal error occurs on start-up.\n\
 \n\
   --pid-file\n\
             (optional) Path to a file into which the PID of the keyserver.\n\
             This file is only written if the keyserver starts successfully.\n\
+\n\
+  --user\n\
+            (optional) user:group to switch to. Can be in the form user:group\n\
+            or just user (in which case user:user is implied) (UNIX only;\n\
+            root only)\n\
+\n\
+  --daemon\n\
+            (optional) Forks and abandons the parent process. (UNIX only)\n\
 \n\
 For example,\n\
 \n\
@@ -560,6 +649,14 @@ For example,\n\
   if (num_workers <= 0 || num_workers > MAX_WORKERS) {
     fatal_error("The --num-workers parameter must between 1 and %d", MAX_WORKERS);
   }
+
+#if PLATFORM_WINDOWS == 0
+  if (daemon) {
+    if (fork() != 0) {
+      return 0;
+    }
+  }
+#endif
 
   SSL_library_init();
   SSL_load_error_strings();
@@ -826,12 +923,12 @@ For example,\n\
   for (i = 0; i < num_workers; i++) {
     rc = uv_async_send(&worker[i].stopper);
     if (rc != 0) {
-      write_log("[error] Failed to send stop async message: %s", 
+      write_log(1, "Failed to send stop async message: %s", 
                 error_string(rc));
     }
     rc = uv_thread_join(&worker[i].thread);
     if (rc != 0) {
-      write_log("[error] Thread join failed: %s", 
+      write_log(1, "Thread join failed: %s", 
                 error_string(rc));
     }
     uv_sem_destroy(&worker[i].semaphore);
@@ -843,6 +940,8 @@ For example,\n\
     uv_mutex_destroy(&locks[i]);
   }
   free(locks);
+
+  free(usergroup);
 
   return 0;
 }

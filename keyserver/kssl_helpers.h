@@ -5,6 +5,8 @@
 #ifndef INCLUDED_KSSL_HELPERS
 #define INCLUDED_KSSL_HELPERS 1
 
+#include "kssl.h"
+
 #ifdef _MSC_VER
 #define PLATFORM_WINDOWS 1
 #define WIN32_LEAN_AND_MEAN
