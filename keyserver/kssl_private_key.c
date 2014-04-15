@@ -104,7 +104,7 @@ static kssl_error_code add_key_from_bio(BIO *key_bp,     // BIO Key value in PEM
   }
 
   if (list->current >= list->allocated) {
-    write_log("Private key list maximum reached");
+    write_log(1, "Private key list maximum reached");
     return KSSL_ERROR_INTERNAL;
   }
 
@@ -129,13 +129,13 @@ static kssl_error_code add_key_from_bio(BIO *key_bp,     // BIO Key value in PEM
 pk_list new_pk_list(int count) {
   pk_list list = (pk_list)malloc(sizeof(struct pk_list_));
   if (list == NULL) {
-    write_log("Memory error");
+    write_log(1, "Memory error");
     return NULL;
   }
 
   list->privates = (private_key *)malloc(sizeof(private_key) * count);
   if (list->privates == NULL) {
-    write_log("Memory error");
+    write_log(1, "Memory error");
     free(list);
     return NULL;
   }
@@ -178,13 +178,13 @@ kssl_error_code add_key_from_file(const char *path, // Path to file containing k
 
   rc = BIO_read_filename(bp, path);
   if (!rc) {
-    write_log("Failed to open private key file %s", path);
+    write_log(1, "Failed to open private key file %s", path);
     return KSSL_ERROR_INTERNAL;
   }
   
   err = add_key_from_bio(bp, list);
   if (err != KSSL_ERROR_NONE) {
-    write_log("Private RSA key from file %s is not valid", path);
+    write_log(1, "Private RSA key from file %s is not valid", path);
     BIO_free(bp);
 
     return KSSL_ERROR_INTERNAL;
@@ -205,7 +205,7 @@ kssl_error_code add_key_from_buffer(const char *key, // Key value in PEM format
   kssl_error_code err = KSSL_ERROR_NONE;
 
   if (!list) {
-    write_log("Assigning to NULL");
+    write_log(1, "Assigning to NULL");
     return KSSL_ERROR_INTERNAL;
   }
 
@@ -216,7 +216,7 @@ kssl_error_code add_key_from_buffer(const char *key, // Key value in PEM format
 
   err = add_key_from_bio(bp, list);
   if (err != KSSL_ERROR_NONE) {
-    write_log("Private RSA key is not valid");
+    write_log(1, "Private RSA key is not valid");
     BIO_free(bp);
     return KSSL_ERROR_INTERNAL;
   }

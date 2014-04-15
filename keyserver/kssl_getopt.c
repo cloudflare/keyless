@@ -269,7 +269,7 @@ parse_long_options(char * const *nargv, const char *options,
 	if (!exact_match && second_partial_match) {
 		/* ambiguous abbreviation */
 		if (PRINT_ERROR)
-			write_log(ambig,
+          write_log(0, ambig,
 #ifdef GNU_COMPATIBLE
 			     current_dash,
 #endif
@@ -282,7 +282,7 @@ parse_long_options(char * const *nargv, const char *options,
 		if (long_options[match].has_arg == no_argument
 		    && has_equal) {
 			if (PRINT_ERROR)
-				write_log(noarg,
+              write_log(0, noarg,
 #ifdef GNU_COMPATIBLE
 				     current_dash,
 #endif
@@ -320,7 +320,7 @@ parse_long_options(char * const *nargv, const char *options,
 			 * should be generated.
 			 */
 			if (PRINT_ERROR)
-				write_log(recargstring,
+              write_log(0, recargstring,
 #ifdef GNU_COMPATIBLE
 				    current_dash,
 #endif
@@ -341,7 +341,7 @@ parse_long_options(char * const *nargv, const char *options,
 			return (-1);
 		}
 		if (PRINT_ERROR)
-			write_log(illoptstring,
+          write_log(0, illoptstring,
 #ifdef GNU_COMPATIBLE
 			      current_dash,
 #endif
@@ -524,11 +524,11 @@ start:
 			++optind;
 #ifdef GNU_COMPATIBLE
 		if (PRINT_ERROR)
-			write_log(posixly_correct ? illoptchar : gnuoptchar,
+          write_log(0, posixly_correct ? illoptchar : gnuoptchar,
 			      optchar);
 #else
 		if (PRINT_ERROR)
-			write_log(illoptchar, optchar);
+          write_log(0, illoptchar, optchar);
 #endif
 		optopt = optchar;
 		return (BADCH);
@@ -540,7 +540,7 @@ start:
 		else if (++optind >= nargc) {	/* no arg */
 			place = EMSG;
 			if (PRINT_ERROR)
-				write_log(recargchar, optchar);
+              write_log(0, recargchar, optchar);
 			optopt = optchar;
 			return (BADARG);
 		} else				/* white space */
@@ -564,7 +564,7 @@ start:
 			if (++optind >= nargc) {	/* no arg */
 				place = EMSG;
 				if (PRINT_ERROR)
-				    write_log(recargchar, optchar);
+                  write_log(0, recargchar, optchar);
 				optopt = optchar;
 				return (BADARG);
 			} else

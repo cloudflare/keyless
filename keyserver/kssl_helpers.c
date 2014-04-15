@@ -419,24 +419,22 @@ static void print_ip(kssl_operation *op, char *ip_string) {
   }
 }
 
-
 // log_operation: write out a KSSL operation to the log
 void log_operation(kssl_header *header, kssl_operation *op) {
   time_t result;
   char ip_string[INET6_ADDRSTRLEN] = {0};
   print_ip(op, ip_string);
   result = time(NULL);
-  write_log("[access_log] version:%d.%d, id:%d, op:%s, ip <%s>, time %s",
+  write_log(0, "version:%d.%d, id:%d, op:%s, ip <%s>, time %s",
     header->version_maj, header->version_min, header->id,
     opstring(op->opcode), ip_string, ctime(&result));
 }
-
 
 // log_error: log an error of the operation
 void log_error(DWORD id, BYTE code) {
   time_t result;
   result = time(NULL);
-  write_log("[error_log] id:%d, error:%s, time:%s",
+  write_log(1, "id:%d, error:%s, time:%s",
     id, errstring(code), ctime(&result));
 }
 
