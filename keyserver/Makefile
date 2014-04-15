@@ -122,13 +122,17 @@ endif
 # presence or absence of the kssl_server.pid file (see above) and thus
 # it's necessary to restart make for them to do the right thing.
 
+.PHONY: test-short
+test-short: TEST_PARAMS := --short
+test-short: test
+
 test: export LD_LIBRARY_PATH=/usr/local/lib
 test: all
 	@$(MAKE) --no-print-directory kill
 	@$(MAKE) --no-print-directory run VALGRIND=$(VALGRIND) PORT=$(PORT)
 	@perl -e 'while (!-e "$(PID_FILE)") { sleep(1); }'
 	@sleep 1
-	@$(OBJ)kssl_testclient --port=$(PORT) --private-key=keys/private.key --client-cert=client-cert/cert.pem --client-key=client-cert/key.pem --ca-file=$(CA_FILE) $(DEBUG) --server=localhost
+	@$(OBJ)kssl_testclient --port=$(PORT) --private-key=keys/private.key --client-cert=client-cert/cert.pem --client-key=client-cert/key.pem --ca-file=$(CA_FILE) $(DEBUG) --server=localhost $(TEST_PARAMS)
 ifeq ($(VALGRIND),1)
 	@$(MAKE) --no-print-directory kill
 	@echo valgrind log in $(VALGRIND_LOG)
