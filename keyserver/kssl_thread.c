@@ -365,7 +365,7 @@ int do_ssl(connection_state *state)
       state->start = 0;
 
       if (state->header.version_maj != KSSL_VERSION_MAJ) {
-        write_log(1, "Message version mismatch %02x != %02x\n",
+        write_log(1, "Message version mismatch %02x != %02x",
                   state->header.version_maj, KSSL_VERSION_MAJ);
         write_error(state, state->header.id, KSSL_ERROR_VERSION_MISMATCH);
         clear_read_queue(state);
@@ -391,7 +391,7 @@ int do_ssl(connection_state *state)
       // This should be unreachable. If this occurs give up processing
       // and reset.
 
-      write_log(1, "Connection in unknown state %d\n", state->state);
+      write_log(1, "Connection in unknown state %d", state->state);
       free_read_state(state);
       set_get_header_state(state);
       return 1;

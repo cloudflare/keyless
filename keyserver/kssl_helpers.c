@@ -421,13 +421,19 @@ static void print_ip(kssl_operation *op, char *ip_string) {
 
 // log_operation: write out a KSSL operation to the log
 void log_operation(kssl_header *header, kssl_operation *op) {
-  time_t result;
   char ip_string[INET6_ADDRSTRLEN] = {0};
+
+  // The \n at the end of the ctime return is chopped off here.
+
+  time_t now = time(NULL); 
+  char *nowstring = ctime(&now);
+  nowstring[strlen(nowstring)-1] = '\0';
+
   print_ip(op, ip_string);
-  result = time(NULL);
+  
   write_log(0, "version:%d.%d, id:%d, op:%s, ip <%s>, time %s",
     header->version_maj, header->version_min, header->id,
-    opstring(op->opcode), ip_string, ctime(&result));
+    opstring(op->opcode), ip_string, nowstring);
 }
 
 // log_error: log an error of the operation

@@ -64,7 +64,7 @@ void fatal_error(const char *fmt, ...)
 void log_ssl_error(SSL *ssl, int rc)
 {
   const char *err = ERR_error_string(SSL_get_error(ssl, rc), 0);
-  write_log(1, "SSL error: %s\n", err);
+  write_log(1, "SSL error: %s", err);
   ERR_clear_error();
 }
 
@@ -72,7 +72,7 @@ void log_ssl_error(SSL *ssl, int rc)
 void log_err_error()
 {
   const char *err = ERR_error_string(ERR_get_error(), 0);
-  write_log(1, "SSL error: %s\n", err);
+  write_log(1, "SSL error: %s", err);
   ERR_clear_error();
 }
 

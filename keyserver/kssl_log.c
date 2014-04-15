@@ -38,7 +38,10 @@ void write_log(int e,                // If set this is an error message
     return;
   }
 
-  newfmt = (char *)malloc(strlen(fmt)+1+strlen(name));
+  // +1 for the terminating 0
+  // +1 for the \n we append in non-syslog mode
+
+  newfmt = (char *)malloc(strlen(fmt)+1+strlen(name)+1);
   strcpy(newfmt, name);
   strcat(newfmt, fmt);
 
@@ -53,6 +56,7 @@ void write_log(int e,                // If set this is an error message
   } else
 #endif
   {
+    strcat(newfmt, "\n");
     vfprintf(e?stderr:stdout, newfmt, l);
   }
 
