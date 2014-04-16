@@ -1,0 +1,115 @@
+#!/bin/bash
+# keyless init file
+#
+# processname: keyless
+# pidfile: /var/run/keyless.pid
+
+# source function library
+. /etc/rc.d/init.d/functions
+
+keyless_OPTIONS=""
+[ -e /etc/sysconfig/keyless ] && . /etc/sysconfig/keyless
+
+RETVAL=0
+prog="keyless"
+binary=/usr/bin/kssl_server
+pidfile=/var/run/keyless.pid
+lockfile=/var/lock/subsys/$prog
+
+start() {
+        [ -x $binary ] || exit 5
+        echo -n $"Starting $prog: "
+        if [ $UID -ne 0 ]; then
+          RETVAL=1
+          failure
+        else
+          if [ ! -f /var/run/keyless.pid ]
+          then
+          	touch /var/run/keyless.pid
+          fi
+          /bin/chown $USER:$GROUP /var/run/keyless.pid
+        	$binary --port=$PORT \
+                  --server-cert=$SERVER_CERT \
+                  --server-key=$SERVER_KEY \
+                  --private-key-directory=$PRIVATE_KEY_DIR \
+                  --cipher-list=$CIPHER_LIST \
+                  --ca-file=$CA_FILE \
+                  --num-workers=$NUM_WORKERS \
+                  --daemon \
+                  --syslog \
+                  --user $USER:$GROUP \
+                  --pid-file=$pidfile
+          
+          RETVAL=$?
+          [ $RETVAL -eq 0 ] && touch $lockfile
+        fi;
+        echo
+        return $RETVAL
+}
+
+stop() {
+        echo -n $"Stopping $prog: "
+        if [ $UID -ne 0 ]; then
+          RETVAL=1
+          failure
+        else
+          killproc -p $pidfile $binary
+          RETVAL=$?
+          [ $RETVAL -eq 0 ] && rm -f $lockfile
+        fi;
+        echo
+        return $RETVAL
+}
+
+restart(){
+	stop
+	start
+}
+
+condrestart(){
+    [ -e $lockfile ] && restart
+    return 0
+}
+
+rh_status_q(){
+    status $prog >/dev/null 2>&1
+}
+
+case "$1" in
+  start)
+	rh_status_q && exit 0
+	start
+	RETVAL=$?
+	;;
+  stop)
+	rh_status_q || exit 0
+	stop
+	RETVAL=$?
+	;;
+  restart)
+	restart
+	RETVAL=$?
+        ;;
+  reload)
+        rh_status_q || exit 7
+	exit 3
+        ;;
+  force-reload)
+	restart
+	RETVAL=$?
+        ;;
+  condrestart|try-restart)
+        rh_status_q || exit 0
+	condrestart
+	RETVAL=$?
+	;;
+  status)
+        status $prog
+	RETVAL=$?
+        ;;
+  *)
+	echo $"Usage: $0 {start|stop|status|restart|condrestart|force-reload}"
+	RETVAL=2
+esac
+
+exit $RETVAL
