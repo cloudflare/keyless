@@ -7,16 +7,22 @@ VERSION   := 1.0
 ITERATION := $(shell date +%s)
 REVISION  := $(shell git log -n1 --pretty=format:%h)
 
+TMP := tmp/
+
+# This is the SHA of the commit on Github of the libuv project that we will
+# build against.
+
+LIBUV_SHA := 1daff47ae9df55902f07d3c5b8a3a393306a2f1e
+
+LIBUV_ROOT := $(TMP)libuv-$(LIBUV_SHA)
+LIBUV_A := $(LIBUV_ROOT)/.libs/libuv.a
+
 # Turn on absolutely all warnings and turn them into errors
 
-CFLAGS += -g -Wall -Wextra -Wno-unused-parameter -Werror -I.
+CFLAGS += -g -Wall -Wextra -Wno-unused-parameter -Werror -I. -I$(LIBUV_ROOT)/include
 
 # Link against OpenSSL and libuv. libuv is built and linked against
 # statically.
-
-TMP := tmp/
-LIBUV_MASTER := $(TMP)libuv-master
-LIBUV_A := $(LIBUV_MASTER)/.libs/libuv.a
 
 LDLIBS := -lcrypto -lssl -lrt -lpthread -L. $(LIBUV_A)
 
@@ -41,7 +47,9 @@ EXECS := $(addprefix $(OBJ)kssl_,server testclient)
 
 .PHONY: all clean test run kill
 all: libuv $(OBJ) $(EXECS)
-clean: ; @rm -rf $(OBJ) $(LIBUV_MASTER) $(LIBUV_ZIP)
+clean: ; @rm -rf $(OBJ) $(LIBUV_ROOT) $(LIBUV_ZIP)
+
+$(call make_dir,$(TMP))
 
 # To rebuild libuv from source delete tmp/libuv.zip
 
@@ -49,12 +57,12 @@ LIBUV_ZIP := $(TMP)libuv.zip
 
 .PHONY: libuv
 libuv: $(LIBUV_A)
-$(LIBUV_A): $(LIBUV_ZIP)
-	@cd $(LIBUV_MASTER) && ./autogen.sh && ./configure --enable-static && make
+$(LIBUV_A): $(call marker,$(TMP)) $(LIBUV_ZIP)
+	@cd $(LIBUV_ROOT) && ./autogen.sh && ./configure --enable-static && make
 
-$(LIBUV_ZIP):
-	@rm -rf $(LIBUV_MASTER)
-	@wget -qO $@ http://github.com/joyent/libuv/archive/master.zip
+$(LIBUV_ZIP): $(call marker,$(TMP))
+	@rm -rf $(LIBUV_ROOT)
+	@wget -qO $@ http://github.com/joyent/libuv/archive/$(LIBUV_SHA).zip
 	@unzip -d $(TMP) $@ 
 
 ## CloudFlare-specific targets and configuration
@@ -98,8 +106,6 @@ clean-package:
 	@$(RM) $(DEB_PACKAGE)
 
 ## end CloudFlare-specific
-
-$(call make_dir,$(TMP))
 
 # Note the use of a # comment at the end of VALGRIND_COMMAND to ensure
 # that there is a trailing space
