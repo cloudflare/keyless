@@ -702,7 +702,6 @@ The following options are not available on Windows systems:\n\
   }
 
   SSL_CTX_set_client_CA_list(ctx, cert_names);
-  SSL_CTX_set_verify_depth(ctx, 1);
 
   if (SSL_CTX_load_verify_locations(ctx, ca_file, 0) != 1) {
     SSL_CTX_free(ctx);
