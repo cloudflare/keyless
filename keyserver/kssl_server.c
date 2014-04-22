@@ -702,18 +702,25 @@ The following options are not available on Windows systems:\n\
   }
 
   SSL_CTX_set_client_CA_list(ctx, cert_names);
-  SSL_CTX_set_verify_depth(ctx, 1);
 
   if (SSL_CTX_load_verify_locations(ctx, ca_file, 0) != 1) {
     SSL_CTX_free(ctx);
     fatal_error("Failed to load CA file %s", ca_file);
   }
 
+  if (SSL_CTX_set_default_verify_paths(ctx) != 1) {
+    SSL_CTX_free(ctx);
+    fatal_error("Call to SSL_CTX_set_default_verify_paths failed");
+  }
+
   free(ca_file);
 
-#define SSL_FAILED(func) if (func != 1) { ssl_error(); }
-  SSL_FAILED(SSL_CTX_use_certificate_file(ctx, server_cert, SSL_FILETYPE_PEM))
-  SSL_FAILED(SSL_CTX_use_PrivateKey_file(ctx, server_key, SSL_FILETYPE_PEM))
+  if (SSL_CTX_use_certificate_file(ctx, server_cert, SSL_FILETYPE_PEM) != 1) {
+    ssl_error();
+  }
+  if (SSL_CTX_use_PrivateKey_file(ctx, server_key, SSL_FILETYPE_PEM) != 1) {
+    ssl_error();
+  }
   if (SSL_CTX_check_private_key(ctx) != 1) {
     SSL_CTX_free(ctx);
     fatal_error("Private key %s and certificate %s do not match", server_key, server_cert);

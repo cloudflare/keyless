@@ -294,8 +294,19 @@ int do_ssl(connection_state *state)
 
   if (!state->connected) {
     if (!SSL_is_init_finished(state->ssl)) {
-      if (SSL_do_handshake(state->ssl) != 1) {
-        return 1;
+      int rc = SSL_do_handshake(state->ssl);
+  
+      if (rc != 1) {
+        switch (SSL_get_error(state->ssl, rc)) {
+        case SSL_ERROR_WANT_READ:
+        case SSL_ERROR_WANT_WRITE:
+          ERR_clear_error();
+          return 1;
+          
+        default:
+          ERR_clear_error();
+          return 0;
+        }
       }
     }
 
