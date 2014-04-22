@@ -63,7 +63,7 @@ EXECS := $(addprefix $(OBJ)kssl_,server testclient)
 
 .PHONY: all clean test run kill
 all: libuv openssl $(OBJ) $(EXECS)
-clean: ; @rm -rf $(OBJ) $(LIBUV_ROOT) $(LIBUV_ZIP) $(OPENSSL_ROOT) $(OPENSSL_TAR_GZ)
+clean: ; @rm -rf $(OBJ) $(LIBUV_ROOT) $(LIBUV_ZIP) $(OPENSSL_ROOT) $(OPENSSL_TAR_GZ) $(BUILD_PATH)
 
 $(call make_dir,$(TMP))
 
@@ -108,7 +108,7 @@ DEB_PACKAGE          := $(NAME)_$(VERSION)-$(ITERATION)-${REVISION}_amd64.deb
 BUILD_PATH           := build
 INSTALL_PREFIX       := usr/local
 PACKAGE_REGISTER_BIN ?= /usr/bin/register-cf-package.sh
-KSSL_BUILD_PATH      := $(BUILD_PATH)/$(INSTALL_PREFIX)/$(NAME)
+KSSL_BUILD_PATH      := $(BUILD_PATH)/$(INSTALL_PREFIX)/bin/
 
 FPM := fakeroot fpm -C $(BUILD_PATH) \
 	-s dir \
@@ -120,7 +120,8 @@ FPM := fakeroot fpm -C $(BUILD_PATH) \
 $(DEB_PACKAGE): clean all
 	@mkdir -p $(KSSL_BUILD_PATH)
 	@cp o/$(NAME) $(KSSL_BUILD_PATH)
-	@$(FPM) -n $(NAME) $(INSTALL_PREFIX)/$(NAME)
+	@cp o/kssl_testclient $(KSSL_BUILD_PATH)
+	@$(FPM) -n $(NAME) .
 
 register-%.deb: ; @$(PACKAGE_REGISTER_BIN) $*.deb
 
