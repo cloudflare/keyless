@@ -710,9 +710,12 @@ The following options are not available on Windows systems:\n\
 
   free(ca_file);
 
-#define SSL_FAILED(func) if (func != 1) { ssl_error(); }
-  SSL_FAILED(SSL_CTX_use_certificate_file(ctx, server_cert, SSL_FILETYPE_PEM))
-  SSL_FAILED(SSL_CTX_use_PrivateKey_file(ctx, server_key, SSL_FILETYPE_PEM))
+  if (SSL_CTX_use_certificate_file(ctx, server_cert, SSL_FILETYPE_PEM) != 1) {
+    ssl_error();
+  }
+  if (SSL_CTX_use_PrivateKey_file(ctx, server_key, SSL_FILETYPE_PEM) != 1) {
+    ssl_error();
+  }
   if (SSL_CTX_check_private_key(ctx) != 1) {
     SSL_CTX_free(ctx);
     fatal_error("Private key %s and certificate %s do not match", server_key, server_cert);
