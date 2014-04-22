@@ -720,10 +720,12 @@ The following options are not available on Windows systems:\n\
   free(ca_file);
 
   if (SSL_CTX_use_certificate_file(ctx, server_cert, SSL_FILETYPE_PEM) != 1) {
-    ssl_error();
+    SSL_CTX_free(ctx);
+    fatal_error("Problem loading certificate from --server-cert=%s", server_cert);
   }
   if (SSL_CTX_use_PrivateKey_file(ctx, server_key, SSL_FILETYPE_PEM) != 1) {
-    ssl_error();
+    SSL_CTX_free(ctx);
+    fatal_error("Problem loading private key from --server-key=%s", server_key);
   }
   if (SSL_CTX_check_private_key(ctx) != 1) {
     SSL_CTX_free(ctx);
