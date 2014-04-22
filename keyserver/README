@@ -5,8 +5,8 @@ This is the keyserver for Keyless SSL. It consists of a single binary
 file 'kssl_server' that has the following command-line options:
 
     --port
-              The TCP port on which to listen for connections. These
-              connections must be TLSv1.2.
+              (optional) The TCP port on which to listen for connections.
+              These connections must be TLSv1.2. Defaults to 2407.
 
      --ip     
               (optional) The IP address of the interface to bind to.
@@ -76,7 +76,7 @@ The following options are not available on Windows systems:
 
 For example,
 
-    kssl_server --port=24008                       \
+    kssl_server --port=2407                        \
                 --server-cert=server-cert/cert.pem \
                 --server-key=server-cert/key.pem   \
                 --private-key-directory=keys       \
