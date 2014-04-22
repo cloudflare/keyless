@@ -1,6 +1,6 @@
 # Makefile: builds the kssl_server and kssl_testclient
 #
-# Copyright (c) 2013 CloudFlare, Inc.
+# Copyright (c) 2013-2014 CloudFlare, Inc.
 
 NAME      := kssl_server
 VERSION   := 1.0
@@ -11,9 +11,14 @@ REVISION  := $(shell git log -n1 --pretty=format:%h)
 
 CFLAGS += -g -Wall -Wextra -Wno-unused-parameter -Werror -I.
 
-# Link against OpenSSL and libuv
+# Link against OpenSSL and libuv. libuv is built and linked against
+# statically.
 
-LDLIBS := -lcrypto -lssl -luv -lrt -L.
+TMP := tmp/
+LIBUV_MASTER := $(TMP)libuv-master
+LIBUV_A := $(LIBUV_MASTER)/.libs/libuv.a
+
+LDLIBS := -lcrypto -lssl -lrt -lpthread -L. $(LIBUV_A)
 
 # This Makefile makes use of the GNU Make Standard Library project
 # which can be found at http://gmsl.sf.net/
@@ -28,8 +33,6 @@ include $(GMSL_DIR)/gmsl
 marker = $1.f
 make_dir = $(eval $1.f: ; @mkdir -p $$(dir $$@) ; touch $$@)
 
-TMP := tmp/
-
 OBJ := o/
 SERVER_OBJS := $(addprefix $(OBJ)kssl_,server.o helpers.o core.o private_key.o log.o thread.o getopt.o)
 TEST_OBJS := $(addprefix $(OBJ)kssl_,helpers.o testclient.o log.o)
@@ -37,8 +40,22 @@ OBJS := $(SERVER_OBJS) $(TEST_OBJS)
 EXECS := $(addprefix $(OBJ)kssl_,server testclient)
 
 .PHONY: all clean test run kill
-all: $(OBJ) $(EXECS)
-clean: ; @rm -rf $(OBJ)
+all: libuv $(OBJ) $(EXECS)
+clean: ; @rm -rf $(OBJ) $(LIBUV_MASTER) $(LIBUV_ZIP)
+
+# To rebuild libuv from source delete tmp/libuv.zip
+
+LIBUV_ZIP := $(TMP)libuv.zip
+
+.PHONY: libuv
+libuv: $(LIBUV_A)
+$(LIBUV_A): $(LIBUV_ZIP)
+	@cd $(LIBUV_MASTER) && ./autogen.sh && ./configure --enable-static && make
+
+$(LIBUV_ZIP):
+	@rm -rf $(LIBUV_MASTER)
+	@wget -qO $@ http://github.com/joyent/libuv/archive/master.zip
+	@unzip -d $(TMP) $@ 
 
 ## CloudFlare-specific targets and configuration
 
