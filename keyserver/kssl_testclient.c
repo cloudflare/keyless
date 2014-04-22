@@ -825,11 +825,6 @@ connection *ssl_connect(SSL_CTX *ctx, int port)
     fatal_error("TLS handshake error %d/%d\n", rc, SSL_get_error(c->ssl, rc));
   }
 
-  rc = SSL_get_verify_result(c->ssl);
-  if (rc != X509_V_OK) {
-      fatal_error("Certificate verification error: %ld\n", SSL_get_verify_result(c->ssl));
-  }
-
   return c;
 }
 
@@ -1024,12 +1019,17 @@ int main(int argc, char *argv[])
     fatal_error("Failed to load client private key from %s", client_key);
   }
 
-  SSL_CTX_check_private_key(ctx);
+  if (SSL_CTX_check_private_key(ctx) != 1) {
+    SSL_CTX_free(ctx);
+    fatal_error("SSL_CTX_check_private_key failed");
+  }
 
   if (SSL_CTX_load_verify_locations(ctx, ca_file, 0) != 1) {
     SSL_CTX_free(ctx);
     fatal_error("Failed to load CA file %s", ca_file);
   }
+
+  SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, 0);
 
   // Use a new connection for each test
   c0 = ssl_connect(ctx, port);
