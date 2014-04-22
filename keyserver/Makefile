@@ -16,15 +16,31 @@ LIBUV_SHA := 1daff47ae9df55902f07d3c5b8a3a393306a2f1e
 
 LIBUV_ROOT := $(TMP)libuv-$(LIBUV_SHA)
 LIBUV_A := $(LIBUV_ROOT)/.libs/libuv.a
+LIBUV_INCLUDE := $(LIBUV_ROOT)/include
+
+# This is the version of OpenSSL to link against.
+
+OPENSSL_VERSION := 1.0.1g
+
+OPENSSL_ROOT := $(TMP)openssl-$(OPENSSL_VERSION)
+
+# Note that the order libssl then libcrypto here is important otherwise the
+# link will fail
+
+OPENSSL_A := $(addprefix $(OPENSSL_ROOT)/,libssl.a libcrypto.a)
+OPENSSL_INCLUDE := $(OPENSSL_ROOT)/include
 
 # Turn on absolutely all warnings and turn them into errors
 
-CFLAGS += -g -Wall -Wextra -Wno-unused-parameter -Werror -I. -I$(LIBUV_ROOT)/include
+CFLAGS += -g -Wall -Wextra -Wno-unused-parameter -Werror
+CFLAGS += -I. -I$(LIBUV_INCLUDE) -I$(OPENSSL_INCLUDE)
 
 # Link against OpenSSL and libuv. libuv is built and linked against
 # statically.
+#
+# Note that -ldl must appear after OPENSSL_A otherwise the link will fail
 
-LDLIBS := -lcrypto -lssl -lrt -lpthread -L. $(LIBUV_A)
+LDLIBS := -lrt -lpthread -L. $(OPENSSL_A) $(LIBUV_A) -ldl
 
 # This Makefile makes use of the GNU Make Standard Library project
 # which can be found at http://gmsl.sf.net/
@@ -46,8 +62,8 @@ OBJS := $(SERVER_OBJS) $(TEST_OBJS)
 EXECS := $(addprefix $(OBJ)kssl_,server testclient)
 
 .PHONY: all clean test run kill
-all: libuv $(OBJ) $(EXECS)
-clean: ; @rm -rf $(OBJ) $(LIBUV_ROOT) $(LIBUV_ZIP)
+all: libuv openssl $(OBJ) $(EXECS)
+clean: ; @rm -rf $(OBJ) $(LIBUV_ROOT) $(LIBUV_ZIP) $(OPENSSL_ROOT) $(OPENSSL_TAR_GZ)
 
 $(call make_dir,$(TMP))
 
@@ -65,6 +81,20 @@ $(LIBUV_ZIP): $(call marker,$(TMP))
 	@wget -qO $@ http://github.com/joyent/libuv/archive/$(LIBUV_SHA).zip
 	@unzip -d $(TMP) $@ 
 
+OPENSSL_TAR_GZ := $(TMP)openssl-$(OPENSSL_VERSION).tar.gz
+
+.PHONY: openssl
+openssl: $(firstword $(OPENSSL_A))
+
+$(firstword $(OPENSSL_A)): $(OPENSSL_TAR_GZ)
+	@cd $(OPENSSL_ROOT) && ./config no-shared && make
+
+$(OPENSSL_TAR_GZ): $(call marker,$(TMP))
+	@rm -rf $(OPENSSL_ROOT)
+	@wget -qO $@ https://www.openssl.org/source/openssl-$(OPENSSL_VERSION).tar.gz
+	@tar -C $(dir $@) -z -x -v -f $@
+
+https://www.openssl.org/source/openssl-1.0.1g.tar.gz
 ## CloudFlare-specific targets and configuration
 
 FPM := fakeroot fpm -C $(BUILD_PATH) \
