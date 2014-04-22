@@ -1022,6 +1022,11 @@ int main(int argc, char *argv[])
     fatal_error("Failed to load CA file %s", ca_file);
   }
 
+  if (SSL_CTX_set_default_verify_paths(ctx) != 1) {
+    SSL_CTX_free(ctx);
+    fatal_error("Call to SSL_CTX_set_default_verify_paths failed");
+  }
+
   if (SSL_CTX_use_certificate_file(ctx, client_cert, SSL_FILETYPE_PEM) != 1) {
     SSL_CTX_free(ctx);
     fatal_error("Failed to load client certificate from %s", client_cert);
