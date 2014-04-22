@@ -162,7 +162,7 @@ void free_pk_list(pk_list list) {
   }
 }
 
-// add_key_from_file: adds am RSA key from a file location, returns
+// add_key_from_file: adds an RSA key from a file location, returns
 // KSSL_ERROR_NONE if successful, or a KSSL_ERROR_* if a problem
 // occurs. Adds the private key to the list if successful.
 kssl_error_code add_key_from_file(const char *path, // Path to file containing key
