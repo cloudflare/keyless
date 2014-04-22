@@ -381,6 +381,7 @@ int main(int argc, char *argv[])
   char *server_cert = 0;
   char *server_key = 0;
   char *private_key_directory = 0;
+  char * default_cipher_list = "ECDHE-RSA-AES128-SHA256:AES128-GCM-SHA256:RC4:HIGH:!MD5:!aNULL:!EDH";
   char *cipher_list = 0;
   char *ca_file = 0;
   char *pid_file = 0;
@@ -655,9 +656,6 @@ The following options are not available on Windows systems:\n\
   if (!private_key_directory) {
     fatal_error("The --private-key-directory parameter must be specified with the path to directory containing private keys");
   }
-  if (!cipher_list) {
-    fatal_error("The --cipher-list parameter must be specified with a list of acceptable ciphers");
-  }
   if (num_workers <= 0 || num_workers > MAX_WORKERS) {
     fatal_error("The --num-workers parameter must between 1 and %d", MAX_WORKERS);
   }
@@ -686,12 +684,18 @@ The following options are not available on Windows systems:\n\
   // to refuse connections that do not have a client certificate. The client
   // certificate must be signed by the CA in the --ca-file parameter.
 
+  if (cipher_list == 0) {
+    cipher_list = default_cipher_list;
+  }
+
   if (SSL_CTX_set_cipher_list(ctx, cipher_list) == 0) {
     SSL_CTX_free(ctx);
     fatal_error("Failed to set cipher list %s", cipher_list);
   }
 
-  free(cipher_list);
+  if (cipher_list != default_cipher_list) {
+    free(cipher_list);
+  }
 
   SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, 0);
 

@@ -17,6 +17,7 @@ LIBUV_SHA := 1daff47ae9df55902f07d3c5b8a3a393306a2f1e
 LIBUV_ROOT := $(TMP)libuv-$(LIBUV_SHA)
 LIBUV_A := $(LIBUV_ROOT)/.libs/libuv.a
 LIBUV_INCLUDE := $(LIBUV_ROOT)/include
+LIBUV_LOG := $(TMP)libuv.log
 
 # This is the version of OpenSSL to link against.
 
@@ -29,6 +30,7 @@ OPENSSL_ROOT := $(TMP)openssl-$(OPENSSL_VERSION)
 
 OPENSSL_A := $(addprefix $(OPENSSL_ROOT)/,libssl.a libcrypto.a)
 OPENSSL_INCLUDE := $(OPENSSL_ROOT)/include
+OPENSSL_LOG := $(TMP)openssl.log
 
 # Turn on absolutely all warnings and turn them into errors
 
@@ -67,34 +69,33 @@ clean: ; @rm -rf $(OBJ) $(LIBUV_ROOT) $(LIBUV_ZIP) $(OPENSSL_ROOT) $(OPENSSL_TAR
 
 $(call make_dir,$(TMP))
 
-# To rebuild libuv from source delete tmp/libuv.zip
-
-LIBUV_ZIP := $(TMP)libuv.zip
+LIBUV_DIR := $(call marker,$(LIBUV_ROOT)/)
 
 .PHONY: libuv
 libuv: $(LIBUV_A)
-$(LIBUV_A): $(call marker,$(TMP)) $(LIBUV_ZIP)
+$(LIBUV_A): $(call marker,$(TMP)) $(LIBUV_DIR)
 	@cd $(LIBUV_ROOT) && ./autogen.sh && ./configure --enable-static && make
 
-$(LIBUV_ZIP): $(call marker,$(TMP))
+$(LIBUV_DIR): $(call marker,$(TMP))
 	@rm -rf $(LIBUV_ROOT)
-	@wget -qO $@ http://github.com/joyent/libuv/archive/$(LIBUV_SHA).zip
-	@unzip -d $(TMP) $@ 
+	@wget -qO $(TMP)$(LIBUV_SHA).zip http://github.com/joyent/libuv/archive/$(LIBUV_SHA).zip
+	@unzip -d $(TMP) $(TMP)$(LIBUV_SHA).zip
+	@touch $@
 
-OPENSSL_TAR_GZ := $(TMP)openssl-$(OPENSSL_VERSION).tar.gz
+OPENSSL_DIR := $(call marker,$(OPENSSL_ROOT)/)
 
 .PHONY: openssl
 openssl: $(firstword $(OPENSSL_A))
 
-$(firstword $(OPENSSL_A)): $(OPENSSL_TAR_GZ)
+$(firstword $(OPENSSL_A)): $(OPENSSL_DIR)
 	@cd $(OPENSSL_ROOT) && ./config no-shared && make
 
-$(OPENSSL_TAR_GZ): $(call marker,$(TMP))
+$(OPENSSL_DIR): $(call marker,$(TMP))
 	@rm -rf $(OPENSSL_ROOT)
-	@wget -qO $@ https://www.openssl.org/source/openssl-$(OPENSSL_VERSION).tar.gz
-	@tar -C $(dir $@) -z -x -v -f $@
+	@wget -qO $(TMP)openssl-$(OPENSSL_VERSION).tar.gz https://www.openssl.org/source/openssl-$(OPENSSL_VERSION).tar.gz
+	@tar -C $(TMP) -z -x -v -f $(TMP)openssl-$(OPENSSL_VERSION).tar.gz
+	@touch $@
 
-https://www.openssl.org/source/openssl-1.0.1g.tar.gz
 ## CloudFlare-specific targets and configuration
 
 FPM := fakeroot fpm -C $(BUILD_PATH) \
@@ -163,7 +164,7 @@ run: all $(call marker,$(TMP))
 ifeq ($(VALGRIND),1)
 	@rm -f $(VALGRIND_LOG)
 endif
-	@$(VALGRIND_COMMAND)$(OBJ)kssl_server --port=$(PORT) --server-cert=server-cert/cert.pem --server-key=server-cert/key.pem --private-key-directory=keys --cipher-list=ECDHE-RSA-AES128-SHA256:AES128-GCM-SHA256:RC4:HIGH:!MD5:!aNULL:!EDH --ca-file=$(CA_FILE) --pid-file=$(PID_FILE) --num-workers=4 --daemon --silent
+	@$(VALGRIND_COMMAND)$(OBJ)kssl_server --port=$(PORT) --server-cert=server-cert/cert.pem --server-key=server-cert/key.pem --private-key-directory=keys --ca-file=$(CA_FILE) --pid-file=$(PID_FILE) --num-workers=4 --daemon --silent
 ifeq ($(VALGRIND),1)
 	@echo $$! > $(PID_FILE)
 endif
