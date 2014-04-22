@@ -914,6 +914,7 @@ int main(int argc, char *argv[])
   struct timeval stop, start;
   int algs[ALGS_COUNT] = {KSSL_OP_RSA_SIGN_MD5SHA1, KSSL_OP_RSA_SIGN_SHA1, KSSL_OP_RSA_SIGN_SHA224,
                           KSSL_OP_RSA_SIGN_SHA256, KSSL_OP_RSA_SIGN_SHA384, KSSL_OP_RSA_SIGN_SHA512};
+  const char * cipher_list = "ECDHE-RSA-AES128-SHA256:AES128-GCM-SHA256:RC4:HIGH:!MD5:!aNULL:!EDH";
 
   const struct option long_options[] = {
     {"port",        required_argument, 0, 0},
@@ -1009,6 +1010,18 @@ int main(int argc, char *argv[])
     ssl_error();
   }
 
+  if (SSL_CTX_set_cipher_list(ctx, cipher_list) == 0) {
+    SSL_CTX_free(ctx);
+    fatal_error("Failed to set cipher list: %s", cipher_list);
+  }
+
+  SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, 0);
+
+  if (SSL_CTX_load_verify_locations(ctx, ca_file, 0) != 1) {
+    SSL_CTX_free(ctx);
+    fatal_error("Failed to load CA file %s", ca_file);
+  }
+
   if (SSL_CTX_use_certificate_file(ctx, client_cert, SSL_FILETYPE_PEM) != 1) {
     SSL_CTX_free(ctx);
     fatal_error("Failed to load client certificate from %s", client_cert);
@@ -1023,13 +1036,6 @@ int main(int argc, char *argv[])
     SSL_CTX_free(ctx);
     fatal_error("SSL_CTX_check_private_key failed");
   }
-
-  if (SSL_CTX_load_verify_locations(ctx, ca_file, 0) != 1) {
-    SSL_CTX_free(ctx);
-    fatal_error("Failed to load CA file %s", ca_file);
-  }
-
-  SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, 0);
 
   // Use a new connection for each test
   c0 = ssl_connect(ctx, port);
