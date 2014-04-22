@@ -376,7 +376,7 @@ void locking_cb(int mode, int type, const char *file, int line) {
 
 int main(int argc, char *argv[])
 {
-  int port = -1;
+  int port = 2407;
   int help = 0;
   char *server_cert = 0;
   char *server_key = 0;
@@ -572,11 +572,11 @@ int main(int argc, char *argv[])
     }
   }
 
-  if (help || (argc < 7)) {
+  if (help) {
     printf("Usage: %s [OPTIONS]\n", PROGRAM_NAME);
     fatal_error("    --port\n\
-              The TCP port on which to listen for connections. These\n\
-              connections must be TLSv1.2.\n\
+              (optional) The TCP port on which to listen for connections.\n\
+              There connections must be TLSv1.2. Defaults to 2407.\n\
 \n\
      --ip     \n\
               (optional) The IP address of the interface to bind to.\n\
@@ -643,9 +643,6 @@ The following options are not available on Windows systems:\n\
 \n\
             (optional) Log lines are sent to syslog (instead of stdout\n\
             or stderr). \n");
-  }
-  if (port == -1) {
-    fatal_error("The --port parameter must be specified with the listen port");
   }
   if (!server_cert) {
     fatal_error("The --server-cert parameter must be specified with the path to the server's SSL certificate");
