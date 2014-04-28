@@ -116,7 +116,7 @@ FPM := fakeroot fpm -C $(BUILD_PATH) \
 	-t deb \
 	--deb-compression bzip2 \
 	-v $(VERSION) \
-	--iteration $(ITERATION)
+	--iteration $(ITERATION)-$(REVISION)
 
 $(DEB_PACKAGE): clean all
 	@mkdir -p $(KSSL_BUILD_PATH)
