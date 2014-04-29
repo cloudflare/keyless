@@ -446,7 +446,7 @@ void read_cb(uv_stream_t *s, ssize_t nread, const uv_buf_t *buf)
     BIO_write(state->read_bio, buf->base, nread);
   }
 
-  if (nread == UV_EOF) {
+  if ((nread == UV_EOF) || (nread < 0)) {
     connection_terminate(state->tcp);
   } else {
     if (do_ssl(state)) {
