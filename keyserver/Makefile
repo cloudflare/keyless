@@ -6,6 +6,7 @@ NAME      := kssl_server
 VERSION   := 1.0
 ITERATION := $(shell date +%s)
 REVISION  := $(shell git log -n1 --pretty=format:%h)
+TODAY     := $(shell date --iso-8601=minutes --utc)
 
 TMP := tmp/
 
@@ -36,6 +37,7 @@ OPENSSL_LOG := $(TMP)openssl.log
 
 CFLAGS += -g -Wall -Wextra -Wno-unused-parameter -Werror
 CFLAGS += -I. -I$(LIBUV_INCLUDE) -I$(OPENSSL_INCLUDE)
+CFLAGS += -DKSSL_VERSION=\"v$(VERSION)\",\"$(TODAY)\",\"$(REVISION)\"
 
 # Link against OpenSSL and libuv. libuv is built and linked against
 # statically.
