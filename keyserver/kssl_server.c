@@ -425,6 +425,7 @@ int main(int argc, char *argv[])
     {"user",                  required_argument, 0, 12},
     {"daemon",                no_argument,       0, 13},
     {"syslog",                no_argument,       0, 14},
+    {"version",               no_argument,       0, 15},
 #endif
     {0,                       0,                 0, 0}
   };
@@ -569,6 +570,10 @@ int main(int argc, char *argv[])
       break;
 
 #endif
+
+    case 15:
+      fatal_error("kssl_server: %s %s %s", KSSL_VERSION );
+      break;
     }
   }
 
