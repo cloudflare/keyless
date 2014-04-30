@@ -38,6 +38,10 @@
 //
 // --short
 //
+// Just do a connectivity test. Exit code 0 if successful.
+//
+// --alive
+//
 // Instead of performing all the tests this simply checks connectivity with
 // the kssl_server by running a limit number of tests.
 
@@ -90,6 +94,7 @@ char *server = 0;
 int tests = 0;
 int debug = 0;
 int health = 0;
+int alive = 0;
 
 // This array will store all of the mutexes available to OpenSSL.
 static MUTEX_TYPE *mutex_buf=NULL;
@@ -179,7 +184,9 @@ void digest_public_modulus(RSA *key, BYTE *digest)
 // ok: indicate that some tests passed and free memory
 void ok(kssl_header *h)
 {
-  printf(" ok\n");
+  if (!alive) {
+    printf(" ok\n");
+  }
   if (h != 0) {
     if (h->data != NULL) free(h->data);
     free(h);
@@ -189,10 +196,12 @@ void ok(kssl_header *h)
 // test: start a set of test
 void test(const char *fmt, ...)
 {
-  va_list l;
-  va_start(l, fmt);
-  vfprintf(stderr, fmt, l);
-  va_end(l);
+  if (!alive) {
+    va_list l;
+    va_start(l, fmt);
+    vfprintf(stderr, fmt, l);
+    va_end(l);
+  }
 }
 
 // test_assert: assert that some condition is true, fatal
@@ -924,7 +933,8 @@ int main(int argc, char *argv[])
     {"ca-file",     required_argument, 0, 4},
     {"debug",       no_argument,       0, 5},
     {"server",      required_argument, 0, 6},
-    {"short",       no_argument,       0, 7}
+    {"short",       no_argument,       0, 7},
+    {"alive",       no_argument,       0, 8}
   };
 
   optind = 1;
@@ -970,6 +980,10 @@ int main(int argc, char *argv[])
       
     case 7:
       health = 1;
+      break;
+      
+    case 8:
+      alive = 1;
       break;
     }
   }
@@ -1040,6 +1054,18 @@ int main(int argc, char *argv[])
   if (SSL_CTX_check_private_key(ctx) != 1) {
     SSL_CTX_free(ctx);
     fatal_error("SSL_CTX_check_private_key failed");
+  }
+
+  // If --alive set then just check connectivity to the kssl_server by
+  // sending an receiving a ping/pong
+  
+  if (alive) {
+    c0 = ssl_connect(ctx, port);
+    kssl_op_pong(c0);
+    ssl_disconnect(c0);
+    SSL_CTX_free(ctx);
+
+    return 0;
   }
 
   // Use a new connection for each test
@@ -1262,10 +1288,6 @@ int main(int argc, char *argv[])
     }
 #endif // PLATFORM_WINDOWS
   }
-
-  goto skip;
-
- skip:
 
   SSL_CTX_free(ctx);
 
