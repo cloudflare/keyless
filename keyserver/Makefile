@@ -10,6 +10,8 @@ TODAY     := $(shell date --iso-8601=minutes --utc)
 
 TMP := tmp/
 
+OS := $(shell uname -s)
+
 # This is the SHA of the commit on Github of the libuv project that we will
 # build against.
 
@@ -44,7 +46,13 @@ CFLAGS += -DKSSL_VERSION=\"v$(VERSION)\",\"$(TODAY)\",\"$(REVISION)\"
 #
 # Note that -ldl must appear after OPENSSL_A otherwise the link will fail
 
-LDLIBS := -lrt -lpthread -L. $(OPENSSL_A) $(LIBUV_A) -ldl
+ifeq ($(OS),Linux)
+LDLIBS := -lrt
+else
+LDLIBS :=
+endif
+
+LDLIBS += -lpthread -L. $(OPENSSL_A) $(LIBUV_A) -ldl
 
 # This Makefile makes use of the GNU Make Standard Library project
 # which can be found at http://gmsl.sf.net/
@@ -86,11 +94,18 @@ $(LIBUV_DIR): $(call marker,$(TMP))
 
 OPENSSL_DIR := $(call marker,$(OPENSSL_ROOT)/)
 
+ifeq ($(OS),Darwin)
+OPENSSL_CONFIG := Configure darwin64-x86_64-cc
+else
+OPENSSL_CONFIG := config
+endif
+
+
 .PHONY: openssl
 openssl: $(firstword $(OPENSSL_A))
 
 $(firstword $(OPENSSL_A)): $(OPENSSL_DIR)
-	@cd $(OPENSSL_ROOT) && ./config no-shared && make
+	@cd $(OPENSSL_ROOT) && ./$(OPENSSL_CONFIG) no-shared && make
 
 $(OPENSSL_DIR): $(call marker,$(TMP))
 	@rm -rf $(OPENSSL_ROOT)
