@@ -126,17 +126,9 @@ $(OPENSSL_DIR): $(call marker,$(TMP))
 
 ## CloudFlare-specific targets and configuration
 
-FPM := fakeroot fpm -C $(BUILD_PATH) \
-	-s dir \
-	-t deb \
-	--deb-compression bzip2 \
-	-v $(VERSION) \
-	--iteration $(ITERATION)
-
 DEB_PACKAGE          := $(NAME)_$(VERSION)-$(ITERATION)-${REVISION}_amd64.deb
 BUILD_PATH           := build
 INSTALL_PREFIX       := usr/local
-PACKAGE_REGISTER_BIN ?= /usr/bin/register-cf-package.sh
 KSSL_BUILD_PATH      := $(BUILD_PATH)/$(INSTALL_PREFIX)/bin/
 
 FPM := fakeroot fpm -C $(BUILD_PATH) \
@@ -152,13 +144,8 @@ $(DEB_PACKAGE): clean all
 	@cp o/kssl_testclient $(KSSL_BUILD_PATH)
 	@$(FPM) -n $(NAME) .
 
-register-%.deb: ; @$(PACKAGE_REGISTER_BIN) $*.deb
-
 .PHONY: cf-package
 cf-package: $(DEB_PACKAGE)
-
-.PHONY: register-cf-package
-register-cf-package: cf-package register-$(DEB_PACKAGE)
 
 .PHONY: clean-package
 clean-package:
