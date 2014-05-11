@@ -6,7 +6,7 @@ NAME      := kssl_server
 VERSION   := 1.0
 ITERATION := $(shell date +%s)
 REVISION  := $(shell git log -n1 --pretty=format:%h)
-TODAY     := $(shell date --iso-8601=minutes --utc)
+TODAY     := $(shell date -u '+%Y-%m-%dT%k:%M%z')
 
 TMP := tmp/
 
