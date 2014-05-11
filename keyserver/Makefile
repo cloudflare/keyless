@@ -5,8 +5,19 @@
 NAME      := kssl_server
 VERSION   := 1.0
 ITERATION := $(shell date +%s)
-REVISION  := $(shell git log -n1 --pretty=format:%h)
-TODAY     := $(shell date -u '+%Y-%m-%dT%k:%M%z')
+
+# HAVE_GIT will be non-empty if git is present on the system. If not it will
+# be the empty string.
+
+HAVE_GIT := $(shell git version 2>1 /dev/null)
+
+ifdef HAVE_GIT
+REVISION := $(shell git log -n1 --pretty=format:%h)
+else
+REVISION := UNKNOWN_REVISION
+endif
+
+TODAY := $(shell date -u '+%Y-%m-%dT%k:%M%z')
 
 TMP := tmp/
 
