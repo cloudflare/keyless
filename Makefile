@@ -2,22 +2,15 @@
 #
 # Copyright (c) 2013-2014 CloudFlare, Inc.
 
-NAME      := keyless
-VERSION   := 1.0
-ITERATION := $(shell date +%s)
+NAME := keyless
 
-# HAVE_GIT will be non-empty if git is present on the system. If not it will
-# be the empty string.
+# This Makefile makes use of the GNU Make Standard Library project
+# which can be found at http://gmsl.sf.net/
 
-HAVE_GIT := $(shell git version 2>1 /dev/null)
+GMSL_DIR := gmsl/
+include $(GMSL_DIR)/gmsl
 
-ifdef HAVE_GIT
-REVISION := $(shell git log -n1 --pretty=format:%h)
-else
-REVISION := UNKNOWN_REVISION
-endif
-
-TODAY := $(shell date -u '+%Y-%m-%dT%H:%M%z')
+include Version
 
 TMP := tmp/
 
@@ -50,7 +43,7 @@ OPENSSL_LOG := $(TMP)openssl.log
 
 CFLAGS += -g -Wall -Wextra -Wno-unused-parameter -Werror
 CFLAGS += -I. -I$(LIBUV_INCLUDE) -I$(OPENSSL_INCLUDE)
-CFLAGS += -DKSSL_VERSION=\"v$(VERSION)\",\"$(TODAY)\",\"$(REVISION)\"
+CFLAGS += -DKSSL_VERSION=\"$(VERSION)-$(REVISION)\"
 
 # Link against OpenSSL and libuv. libuv is built and linked against
 # statically.
@@ -64,12 +57,6 @@ LDLIBS :=
 endif
 
 LDLIBS += -lpthread -L. $(OPENSSL_A) $(LIBUV_A) -ldl
-
-# This Makefile makes use of the GNU Make Standard Library project
-# which can be found at http://gmsl.sf.net/
-
-GMSL_DIR := gmsl/
-include $(GMSL_DIR)/gmsl
 
 # Macros for automatically making directories using marker files.
 # http://www.cmcrossroads.com/ask-mr-make/6936-making-directories-in-gnu-make
@@ -240,3 +227,5 @@ $(OBJ)%.o: %.c ; @$(COMPILE.c) $(OUTPUT_OPTION) $<
 
 $(OBJ)$(NAME).o: kssl.h
 $(OBJ)testclient.o: kssl.h
+
+include Release
