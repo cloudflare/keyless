@@ -56,7 +56,6 @@ void fatal_error(const char *fmt, ...)
   vfprintf(stderr, fmt, l);
   va_end(l);
   fprintf(stderr, "\n");
-
   exit(1);
 }
 
@@ -445,7 +444,7 @@ int main(int argc, char *argv[])
       break;
 
     case '?':
-      return 1;
+      exit(1);
       break;
 
     case 0:
@@ -665,7 +664,7 @@ The following options are not available on Windows systems:\n\
 #if PLATFORM_WINDOWS == 0
   if (daemon) {
     if (fork() != 0) {
-      return 0;
+      exit(0);
     }
   }
 #endif
@@ -970,6 +969,6 @@ The following options are not available on Windows systems:\n\
 
   free(usergroup);
 
-  return 0;
+  exit(0);
 }
 
