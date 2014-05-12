@@ -86,7 +86,7 @@ EXECS := $(addprefix $(OBJ)kssl_,server testclient)
 
 .PHONY: all clean test run kill
 all: libuv openssl $(OBJ) $(EXECS)
-clean: ; @rm -rf $(OBJ) $(LIBUV_ROOT) $(LIBUV_ZIP) $(OPENSSL_ROOT) $(OPENSSL_TAR_GZ) $(BUILD_PATH)
+clean: ; @rm -rf $(OBJ) $(LIBUV_ROOT) $(LIBUV_ZIP) $(OPENSSL_ROOT) $(OPENSSL_TAR_GZ) $(DEST_PATH)
 
 $(call make_dir,$(TMP))
 
@@ -126,43 +126,50 @@ $(OPENSSL_DIR): $(call marker,$(TMP))
 
 ## CloudFlare-specific targets and configuration
 
-FPM := fakeroot fpm -C $(BUILD_PATH) \
-	-s dir \
-	-t deb \
-	--deb-compression bzip2 \
-	-v $(VERSION) \
-	--iteration $(ITERATION)
-
-DEB_PACKAGE          := $(NAME)_$(VERSION)-$(ITERATION)-${REVISION}_amd64.deb
-BUILD_PATH           := build
+DEB_PACKAGE          := $(NAME)_$(VERSION)-$(ITERATION)-$(REVISION)_amd64.deb
+DEST_PATH           := build
 INSTALL_PREFIX       := usr/local
-PACKAGE_REGISTER_BIN ?= /usr/bin/register-cf-package.sh
-KSSL_BUILD_PATH      := $(BUILD_PATH)/$(INSTALL_PREFIX)/bin/
+KSSL_DEST_PATH      := $(DEST_PATH)/$(INSTALL_PREFIX)/bin/
 
-FPM := fakeroot fpm -C $(BUILD_PATH) \
+INIT_DEFAULT_PREFIX   := /etc/default
+
+VENDOR="CloudFlare"
+LICENSE="TBD"
+URL="http://www.cloduflare.com"
+DESCRIPTION="A reference implementation for CloudFlare's Keyless SSL serve"
+OS="debian"
+
+FPM := fakeroot fpm -C $(DEST_PATH) \
+	-a native \
 	-s dir \
 	-t deb \
 	--deb-compression bzip2 \
+	--deb-user root --deb-group root \
 	-v $(VERSION) \
-	--iteration $(ITERATION)-$(REVISION)
+	--iteration $(ITERATION)-$(REVISION) \
+	--before-install pkg/$(OS)/before-install.sh \
+	--before-remove pkg/$(OS)/before-remove.sh \
+	--after-install pkg/$(OS)/after-install.sh \
+	--config-files $(INIT_DEFAULT_PREFIX)/logstash \
 
 $(DEB_PACKAGE): clean all
-	@mkdir -p $(KSSL_BUILD_PATH)
-	@cp o/$(NAME) $(KSSL_BUILD_PATH)
-	@cp o/kssl_testclient $(KSSL_BUILD_PATH)
-	@$(FPM) -n $(NAME) .
+	@mkdir -p $(DEST_PATH)/etc/init.d
+	@mkdir -p $(DEST_PATH)/etc/default
+	@mkdir -p $(DEST_PATH)/etc/keyless/keys
+	@install -m644 pkg/keyless.default $(DEST_PATH)/etc/default/keyless
+	@install -m755 pkg/keyless.sysv $(DEST_PATH)/etc/init.d/keyless
+	@install -m644 pkg/keyless_cacert.pem $(DEST_PATH)/etc/keyless/keyless_cacert.pem
 
-register-%.deb: ; @$(PACKAGE_REGISTER_BIN) $*.deb
+	@mkdir -p $(KSSL_DEST_PATH)
+	@cp o/$(NAME) $(KSSL_DEST_PATH)
+	@$(FPM) -n $(NAME) .
 
 .PHONY: cf-package
 cf-package: $(DEB_PACKAGE)
 
-.PHONY: register-cf-package
-register-cf-package: cf-package register-$(DEB_PACKAGE)
-
 .PHONY: clean-package
 clean-package:
-	@$(RM) -r $(BUILD_PATH)
+	@$(RM) -r $(DEST_PATH)
 	@$(RM) $(DEB_PACKAGE)
 
 ## end CloudFlare-specific
