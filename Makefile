@@ -1,8 +1,8 @@
-# Makefile: builds the kssl_server and kssl_testclient
+# Makefile: builds the keyless (server) and testclient
 #
 # Copyright (c) 2013-2014 CloudFlare, Inc.
 
-NAME      := kssl_server
+NAME      := keyless
 VERSION   := 1.0
 ITERATION := $(shell date +%s)
 
@@ -79,10 +79,10 @@ marker = $1.f
 make_dir = $(eval $1.f: ; @mkdir -p $$(dir $$@) ; touch $$@)
 
 OBJ := o/
-SERVER_OBJS := $(addprefix $(OBJ)kssl_,server.o helpers.o core.o private_key.o log.o thread.o getopt.o)
-TEST_OBJS := $(addprefix $(OBJ)kssl_,helpers.o testclient.o log.o)
+SERVER_OBJS := $(addprefix $(OBJ),keyless.o $(addprefix kssl_,helpers.o core.o private_key.o log.o thread.o getopt.o))
+TEST_OBJS := $(addprefix $(OBJ),testclient.o $(addprefix kssl_,helpers.o log.o))
 OBJS := $(SERVER_OBJS) $(TEST_OBJS)
-EXECS := $(addprefix $(OBJ)kssl_,server testclient)
+EXECS := $(addprefix $(OBJ),keyless testclient)
 
 .PHONY: all clean test run kill
 all: libuv openssl $(OBJ) $(EXECS)
@@ -110,7 +110,6 @@ OPENSSL_CONFIG := Configure darwin64-x86_64-cc
 else
 OPENSSL_CONFIG := config
 endif
-
 
 .PHONY: openssl
 openssl: $(firstword $(OPENSSL_A))
@@ -184,12 +183,12 @@ VALGRIND_COMMAND := valgrind --leak-check=yes --log-file=$(VALGRIND_LOG) --show-
 endif
 
 PORT := $(shell perl free-port.pl)
-PID_FILE := $(TMP)kssl_server.pid
-SERVER_LOG := $(TMP)kssl_server.log
+PID_FILE := $(TMP)$(NAME).pid
+SERVER_LOG := $(TMP)$(NAME).log
 CA_FILE := CA/cacert.pem
 ifneq ($(wildcard $(PID_FILE)),)
 PID := $(shell cat $(PID_FILE))
-run: ; @echo kssl_server running as PID $(PID)
+run: ; @echo $(NAME) running as PID $(PID)
 kill:
 	@kill $(PID)
 	@rm -f $(PID_FILE)
@@ -199,7 +198,7 @@ run: all $(call marker,$(TMP))
 ifeq ($(VALGRIND),1)
 	@rm -f $(VALGRIND_LOG)
 endif
-	@$(VALGRIND_COMMAND)$(OBJ)kssl_server --port=$(PORT) --server-cert=server-cert/cert.pem --server-key=server-cert/key.pem --private-key-directory=keys --ca-file=$(CA_FILE) --pid-file=$(PID_FILE) --num-workers=4 --daemon --silent
+	@$(VALGRIND_COMMAND)$(OBJ)$(NAME) --port=$(PORT) --server-cert=server-cert/cert.pem --server-key=server-cert/key.pem --private-key-directory=keys --ca-file=$(CA_FILE) --pid-file=$(PID_FILE) --num-workers=4 --daemon --silent
 ifeq ($(VALGRIND),1)
 	@echo $$! > $(PID_FILE)
 endif
@@ -209,7 +208,7 @@ endif
 
 # Note that sub-makes are used here for the kill and run targets
 # because the definition of those targets changes depending on the
-# presence or absence of the kssl_server.pid file (see above) and thus
+# presence or absence of the $(NAME).pid file (see above) and thus
 # it's necessary to restart make for them to do the right thing.
 
 .PHONY: test-short
@@ -222,22 +221,22 @@ test: all
 	@$(MAKE) --no-print-directory run VALGRIND=$(VALGRIND) PORT=$(PORT)
 	@perl -e 'while (!-e "$(PID_FILE)") { sleep(1); }'
 	@sleep 1
-	@$(OBJ)kssl_testclient --port=$(PORT) --private-key=keys/private.key --client-cert=client-cert/cert.pem --client-key=client-cert/key.pem --ca-file=$(CA_FILE) $(DEBUG) --server=localhost $(TEST_PARAMS)
+	@$(OBJ)testclient --port=$(PORT) --private-key=keys/private.key --client-cert=client-cert/cert.pem --client-key=client-cert/key.pem --ca-file=$(CA_FILE) $(DEBUG) --server=localhost $(TEST_PARAMS)
 ifeq ($(VALGRIND),1)
 	@$(MAKE) --no-print-directory kill
 	@echo valgrind log in $(VALGRIND_LOG)
 endif
 
 # ABOVE: when running the test suite with valgrind we need the
-# kssl_server to terminate; hence the extra $(MAKE) kill at the end
+# $(NAME) to terminate; hence the extra $(MAKE) kill at the end
 
 $(OBJ):
 	@mkdir -p $@
 
-$(OBJ)kssl_server: $(SERVER_OBJS) ; @$(LINK.o) $^ $(LOADLIBES) $(LDLIBS) -o $@
-$(OBJ)kssl_testclient: $(TEST_OBJS) ; @$(LINK.o) $^ $(LOADLIBES) $(LDLIBS) -o $@
+$(OBJ)$(NAME): $(SERVER_OBJS) ; @$(LINK.o) $^ $(LOADLIBES) $(LDLIBS) -o $@
+$(OBJ)testclient: $(TEST_OBJS) ; @$(LINK.o) $^ $(LOADLIBES) $(LDLIBS) -o $@
 
 $(OBJ)%.o: %.c ; @$(COMPILE.c) $(OUTPUT_OPTION) $<
 
-$(OBJ)kssl_server.o: kssl.h
-$(OBJ)kssl_testclient.o: kssl.h
+$(OBJ)$(NAME).o: kssl.h
+$(OBJ)testclient.o: kssl.h
