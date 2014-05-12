@@ -1,4 +1,4 @@
-// kssl_server.c: TLSv1.2 server for the CloudFlare Keyless SSL
+// keyless.c: TLSv1.2 server for the CloudFlare Keyless SSL
 // protocol
 //
 // Copyright (c) 2013-2014 CloudFlare, Inc.
@@ -37,7 +37,7 @@
 #include "kssl_thread.h"
 
 // This defines argv[0] without the calling path
-#define PROGRAM_NAME "kssl_server"
+#define PROGRAM_NAME "keyless"
 
 // ssl_error: call when a fatal SSL error occurs. Exits the program
 // with return code 1.
@@ -571,7 +571,7 @@ int main(int argc, char *argv[])
 #endif
 
     case 15:
-      fatal_error("kssl_server: %s %s %s", KSSL_VERSION );
+      fatal_error("keyless: %s %s %s", KSSL_VERSION );
       break;
     }
   }
