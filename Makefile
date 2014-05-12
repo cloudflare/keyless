@@ -4,6 +4,12 @@
 
 NAME := keyless
 
+# This Makefile makes use of the GNU Make Standard Library project
+# which can be found at http://gmsl.sf.net/
+
+GMSL_DIR := gmsl/
+include $(GMSL_DIR)/gmsl
+
 include Version
 
 TMP := tmp/
@@ -51,12 +57,6 @@ LDLIBS :=
 endif
 
 LDLIBS += -lpthread -L. $(OPENSSL_A) $(LIBUV_A) -ldl
-
-# This Makefile makes use of the GNU Make Standard Library project
-# which can be found at http://gmsl.sf.net/
-
-GMSL_DIR := gmsl/
-include $(GMSL_DIR)/gmsl
 
 # Macros for automatically making directories using marker files.
 # http://www.cmcrossroads.com/ask-mr-make/6936-making-directories-in-gnu-make
