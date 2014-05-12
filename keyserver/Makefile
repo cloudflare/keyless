@@ -17,7 +17,7 @@ else
 REVISION := UNKNOWN_REVISION
 endif
 
-TODAY := $(shell date -u '+%Y-%m-%dT%k:%M%z')
+TODAY := $(shell date -u '+%Y-%m-%dT%H:%M%z')
 
 TMP := tmp/
 
