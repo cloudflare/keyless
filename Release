@@ -38,8 +38,8 @@ RELEASE_TAG := R$(NEXT_VERSION)-$(shell date '+%Y%m%d-%H%M')
 
 .PHONY: release
 release: check-build
-	@echo $(RELEASE_TAG) >> $(RN_TMP)
-	@git log --reverse --date=short --format="- %ad %s" tags/$(LAST_TAG)..HEAD >> $(RN_TMP)
+	@echo $(RELEASE_TAG) > $(RN_TMP)
+	@git log --reverse --date=short --format="- %ad %s" tags/$(subst LAST_TAG)..HEAD >> $(RN_TMP)
 	@echo >> $(RN_TMP)
 	@echo >> $(RN_TMP)
 	@cat $(RN) >> $(RN_TMP)
