@@ -177,7 +177,7 @@ ifneq ($(wildcard $(PID_FILE)),)
 PID := $(shell cat $(PID_FILE))
 run: ; @echo $(NAME) running as PID $(PID)
 kill:
-	@kill $(PID)
+	-@kill $(PID)
 	@rm -f $(PID_FILE)
 else
 run: export LD_LIBRARY_PATH=/usr/local/lib
@@ -209,13 +209,10 @@ test: all
 	@perl -e 'while (!-e "$(PID_FILE)") { sleep(1); }'
 	@sleep 1
 	@$(OBJ)testclient --port=$(PORT) --private-key=keys/private.key --client-cert=client-cert/cert.pem --client-key=client-cert/key.pem --ca-file=$(CA_FILE) $(DEBUG) --server=localhost $(TEST_PARAMS)
-ifeq ($(VALGRIND),1)
 	@$(MAKE) --no-print-directory kill
+ifeq ($(VALGRIND),1)
 	@echo valgrind log in $(VALGRIND_LOG)
 endif
-
-# ABOVE: when running the test suite with valgrind we need the
-# $(NAME) to terminate; hence the extra $(MAKE) kill at the end
 
 $(OBJ):
 	@mkdir -p $@
