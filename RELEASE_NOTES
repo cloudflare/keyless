@@ -1,3 +1,16 @@
+R1.2.0-20140514-0928
+- 2014-05-12 Merge pull request #46 from jgrahamc/master
+- 2014-05-12 Merge pull request #47 from jgrahamc/master
+- 2014-05-12 Merge pull request #48 from jgrahamc/master
+- 2014-05-12 Clean up RELEASE_NOTES from various tests
+- 2014-05-12 Update RELEASE_NOTES
+- 2014-05-12 KEY-16 - Tweak install scripts for pacakges
+- 2014-05-12 Merge ABOUT and README
+- 2014-05-13 Merge pull request #49 from cloudflare/nick/mergehelp
+- 2014-05-14 Merge remote-tracking branch 'upstream/master'
+- 2014-05-14 Fix minor error with tagging
+
+
 R1.1.0-20140512-0916
 - 2014-05-12 Address KEY-14. Implement versioning system used by RRDNS.
 - 2014-05-12 Include gmsl before Version is Version needs __gmsl_space
