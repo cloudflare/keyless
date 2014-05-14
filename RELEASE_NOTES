@@ -1,5 +1,3 @@
 R1.1.0-20140512-0916
 - 2014-05-12 Address KEY-14. Implement versioning system used by RRDNS.
 - 2014-05-12 Include gmsl before Version is Version needs __gmsl_space
-
-
