@@ -125,7 +125,7 @@ URL="http://www.cloduflare.com"
 DESCRIPTION="A reference implementation for CloudFlare's Keyless SSL serve"
 OS="debian"
 
-FPM := fakeroot fpm -C $(DEST_PATH) \
+FPM := fpm -C $(DEST_PATH) \
 	-a native \
 	-s dir \
 	-t deb \
