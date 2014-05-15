@@ -1,11 +1,9 @@
-CloudFlare Keyless SSL reference implementation user guide
+CloudFlare Keyless SSL
 ==========================================================
 
-This repository contains a reference implementation of CloudFlare's
-keyless SSL server.
+This repository contains a reference implementation of CloudFlare's keyless SSL server.
 
-Protocol
---------
+## Protocol
 
 The CloudFlare Keyless SSL client communicates to the server via a
 binary protocol over a mutually authenticated TLS tunnel.  Messages
@@ -81,8 +79,9 @@ On an error, these are the possible 1-byte payloads:
     0x07 - format error - malformed message
     0x08 - internal error - memory or other internal error
 
-Key Management
---------------
+![Image](https://raw.githubusercontent.com/cloudflare/keyless/master/docs/keyless_exchange_diagram.png)
+
+## Key Management
 
 The Keyless SSL server is a TLS server and therefore requires
 cryptographic keys. All requests are mutually authenticated, so both
@@ -100,12 +99,45 @@ PEM format in a directory denoted by the option:
     --private-key-directory
 
 In order to authenticate the client'certificate, a custom CA file is
-required.  This CA file is provided by CloudFlare and provided with:
+required.  This CA file available is provided by CloudFlare and provided with:
 
     --ca-file
 
-Code Organization
------------------
+# Deploying 
+
+## Installing
+
+### Source
+
+### Packages
+
+## Running
+
+### Commandline Arguments
+
+This is the keyserver for Keyless SSL. It consists of a single binary file 'kssl_server' that has the following command-line options:
+
+- `--port` (optional) The TCP port on which to listen for connections. These connections must be TLSv1.2. Defaults to 2407.
+- `--ip` (optional) The IP address of the interface to bind to. If missing binds to all available interfaces.
+- `--ca-file` Path to a PEM-encoded file containing the CA certificate used to sign client certificates presented on connection.
+- `--server-cert`
+- `--server-key` Path to PEM-encoded files containing the certificate and private key that are used when a connection is made to the server. These must be signed by an authority that the client side recognizes (e.g. the same CA as --ca-file).
+- `--cipher-list` An OpenSSL list of ciphers that the TLS server will accept for connections. e.g. ECDHE-RSA-AES128-SHA256:RC4:HIGH:!MD5
+- `--private-key-directory` Path to a directory containing private keys which the keyserver provides decoding service against. The key files must end with ".key" and be PEM-encoded. There should be no trailing / on  the path.
+- `--silent` Prevents keyserver from producing any log output. Fatal start up errors are sent to stderr.
+`--verbose` Enables verbose logging. When enabled access log data is sent to the logger as well as errors.
+`--num-workers` (optional) The number of worker threads to start. Each worker thread will handle a single connection from a KSSL client.  Defaults to 1.
+- `--pid-file` (optional) Path to a file into which the PID of the keyserver. This file is only written if the keyserver starts successfully.
+
+The following options are not available on Windows systems:
+
+- `--user` (optional) user:group to switch to. Can be in the form user:group or just user (in which case user:user is implied) (root only)
+- `--daemon` (optional) Forks and abandons the parent process.
+- `--syslog` (optional) Log lines are sent to syslog (instead of stdout or stderr). 
+
+# Developing
+
+## Code Organization
 
 The code is split into several files by function in order to enable
 swapping with custom implementations.
@@ -127,135 +159,58 @@ The following files are reference implementations of the APIs above.
                         private keys using openssl
     kssl_log.c          implementation of logging to stderr
 
-Building and Dependencies
--------------------------
-
-The Keyless SSL server implementation has two external dependencies,
-OpenSSL and libuv.  These are open source and available for most
-platforms.
-
-For Unix-based systems, the server and test suite are built with a
-Makefile.
-
-To build:
-
-    make
-
-Result:
-
-    o/kssl_testclient o/kssl_server
-
-To test:
-
-    make test
-
-Recommended Settings
---------------------
-
-The kssl_server command line options determine configuration.
-
-The recommended value for cipher-list is: ECDHE-RSA-AES128-SHA256
-The recommended port is: 24008
-
-Keyserver Configuration
------------------------
-
-This is the keyserver for Keyless SSL. It consists of a single binary
-file 'kssl_server' that has the following command-line options:
-
-    --port
-              (optional) The TCP port on which to listen for connections.
-              These connections must be TLSv1.2. Defaults to 2407.
-
-     --ip     
-              (optional) The IP address of the interface to bind to.
-              If missing binds to all available interfaces.
+## Prerequisites
     
-     --ca-file
+On Debian-based Linuxes:
 
-              Path to a PEM-encoded file containing the CA certificate
-              used to sign client certificates presented on connection.
+``` sh
+sudo apt-get install gcc
+sudo gem install fpm
+```
 
-    --server-cert
-    --server-key
+On Centos:
 
-              Path to PEM-encoded files containing the certificate and
-              private key that are used when a connection is made to the
-              server. These must be signed by an authority that the client
-              side recognizes (e.g. the same CA as --ca-file).
+``` sh
+sudo yum install gcc
+sudo gem install fpm
+```
 
-    --cipher-list
+On OS X (homebrew):
 
-              An OpenSSL list of ciphers that the TLS server will accept
-              for connections. e.g. ECDHE-RSA-AES128-SHA256:RC4:HIGH:!MD5
+``` sh
+sudo gem install fpm
+```
 
-    --private-key-directory
-
-              Path to a directory containing private keys which the keyserver
-              provides decoding service against. The key files must end with
-              ".key" and be PEM-encoded. There should be no trailing / on 
-              the path.
-
-    --silent
-              Prevents keyserver from producing any log output. Fatal
-              start up errors are sent to stderr.
-
-    --verbose 
-
-              Enables verbose logging. When enabled access log data is
-              sent to the logger as well as errors.
-
-    --num-workers
-
-              (optional) The number of worker threads to start. Each worker
-              thread will handle a single connection from a KSSL client. 
-              Defaults to 1.
-
-    --pid-file
-
-              (optional) Path to a file into which the PID of the keyserver.
-              This file is only written if the keyserver starts successfully.
-
-
-The following options are not available on Windows systems:
-
-    --user
-
-            (optional) user:group to switch to. Can be in the form user:group
-            or just user (in which case user:user is implied) (root only)
-
-    --daemon
-
-            (optional) Forks and abandons the parent process.
-
-    --syslog
-
-            (optional) Log lines are sent to syslog (instead of stdout
-            or stderr). 
-
-For example,
-
-    kssl_server --port=2407                        \
-                --server-cert=server-cert/cert.pem \
-                --server-key=server-cert/key.pem   \
-                --private-key-directory=keys       \
-                --cipher-list=ECDHE-RSA-AES128-SHA256:AES128-GCM-SHA256:RC4:HIGH:!MD5:!aNULL:!EDH \
-                --ca-file=CA/cacert.pem            \
-                --pid-file=keyserver.pid
-
-Makefile Targets
-----------------
+## Makefile
 
 The Makefile has the following useful targets:
 
-    all     The default target that builds both the keyserver and
-            the testclient
+- `make all` - The default target that builds both the keyserver and the testclient
+- `make clean` - Deletes the keyserver, testclient and related object files
+- `make run` - Runs the keyserver with a configuration suitable for testing (with the testclient)
+- `make kill` - Stops the keyserver started by 'make run'
+- `make test` - Runs the testclient against the keyserver.
+- `make release` - Increment the minor version number and generate and updated RELEASE_NOTES with all changes to keyless since the last time a release was performed.
+- `make package` - build and make app package for specific OS. e.g. deb for Debian
 
-    clean   Deletes the keyserver, testclient and related object files
+## Building
 
-    run     Runs the keyserver with a configuration suitable for testing
-            (with the testclient)
+The Keyless SSL server implementation has two external dependencies, OpenSSL and libuv.  These are open source and available for most platforms.  For ease of deployment and consistency these depencecies are statically compiled by default. 
 
-    kill    Stops the keyserver started by 'make run'
+For Unix-based systems, the server and test suite are built with a Makefile.
 
-    test    Runs the testclient against the keyserver.
+To build:
+
+    `make`
+
+Result:
+
+    `o/kssl_testclient o/kssl_server`
+
+To test:
+
+    `make test`
+
+
+# License
+
