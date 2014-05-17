@@ -117,7 +117,18 @@ with:
 
 ### Source
 
+Use Git to get the latest development version from our repository:
+
+    git clone https://github.com/cloudflare/keyless.git
+    cd keyless
+    make && make install
+
+Alternatively you can just 
+[download](https://github.com/cloudflare/keyless/archive/master.tar.gz) the
+bleeding edge code directly.
+
 ### Packages
+
 
 ## Running
 
@@ -225,6 +236,7 @@ The Makefile has the following useful targets:
 - `all` - The default target that builds both the keyless server and the
  testclient
 - `clean` - Deletes the keyless server, testclient and related object files
+- `install` - Install the keyless server
 - `run` - Runs the keyless server with a configuration suitable for testing
  (with the testclient)
 - `kill` - Stops the keyless server started by 'make run'
@@ -265,4 +277,6 @@ the keyless server works (at all!):
     make test-short
 
 # License
+
+CloudFlare's Keyless services is licensed under the XXX License - see the LICENSE file for details
 

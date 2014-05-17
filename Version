@@ -20,7 +20,8 @@ MINOR := $(word 2,$(REVISION_PARTS))
 PATCH := $(word 3,$(REVISION_PARTS))
 
 VERSION   := $(subst R,,$(FULL))
-REVISION := $(shell git log -n1 --pretty=format:%h)
+REVISION  := $(shell git log -n1 --pretty=format:%h)
+ITERATION := $(shell date +%s)
 
 else
 

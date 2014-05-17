@@ -73,7 +73,7 @@ EXECS := $(addprefix $(OBJ),keyless testclient)
 
 .PHONY: all clean test run kill
 all: libuv openssl $(OBJ) $(EXECS)
-clean: ; @rm -rf $(OBJ) $(LIBUV_ROOT) $(LIBUV_ZIP) $(OPENSSL_ROOT) $(OPENSSL_TAR_GZ) $(DEST_PATH)
+clean: ; @rm -rf $(OBJ) $(LIBUV_ROOT) $(LIBUV_ZIP) $(OPENSSL_ROOT) $(OPENSSL_TAR_GZ) $(DESTDIR)
 
 $(call make_dir,$(TMP))
 
@@ -110,55 +110,84 @@ $(OPENSSL_DIR): $(call marker,$(TMP))
 	@tar -C $(TMP) -z -x -v -f $(TMP)openssl-$(OPENSSL_VERSION).tar.gz
 	@touch $@
 
-## CloudFlare-specific targets and configuration
+DESTDIR                 = 
+PREFIX                  = usr/local
+INSTALL_BIN             = $(DESTDIR)/$(PREFIX)/bin
+INIT_DEFAULT_PREFIX     = $(DESTDIR)/etc/default
+INIT_PREFIX             = $(DESTDIR)/etc/init.d
+CONFIG_PREFIX           = $(DESTDIR)/etc/keyless
+ifeq ($(DISTRO),centos)
+INIT_DEFAULT_PREFIX     = $(DESTDIR)/etc/sysconfig
+else
+INIT_DEFAULT_PREFIX     = $(DESTDIR)/etc/default
+endif
 
-DEB_PACKAGE          := $(NAME)_$(VERSION)-$(ITERATION)-$(REVISION)_amd64.deb
-DEST_PATH           := build
-INSTALL_PREFIX       := usr/local
-KSSL_DEST_PATH      := $(DEST_PATH)/$(INSTALL_PREFIX)/bin/
+install-all: install install-config
 
-INIT_DEFAULT_PREFIX   := /etc/default
+install: all
+	@mkdir -p $(INSTALL_BIN)
+	@install -m755 o/$(NAME) $(INSTALL_BIN)
+
+install-config:
+	@mkdir -p $(CONFIG_PREFIX)
+	@mkdir -p $(INIT_PREFIX)
+	@mkdir -p $(INIT_DEFAULT_PREFIX)
+	@install -m644 pkg/keyless.default $(INIT_DEFAULT_PREFIX)/keyless
+	@install -m755 pkg/keyless.sysv $(INIT_PREFIX)/keyless
+	@install -m644 pkg/keyless_cacert.pem $(CONFIG_PREFIX)/keyless_cacert.pem
 
 VENDOR="CloudFlare"
 LICENSE="TBD"
-URL="http://www.cloduflare.com"
+URL="http://www.cloudflare.com"
 DESCRIPTION="A reference implementation for CloudFlare's Keyless SSL serve"
-OS="debian"
+DISTRO      ?= debian
+ARCH    ?= x86_64
 
-FPM := fpm -C $(DEST_PATH) \
-	-a native \
+DEB_PACKAGE         := $(NAME)_$(VERSION)-$(ITERATION)_x86_64.deb
+RPM_PACKAGE         := $(NAME)-$(VERSION)_$(ITERATION).x86_64.rpm
+
+FPM = fpm -C $(DESTDIR) \
+	-n $(NAME) \
+	-a $(ARCH) \
 	-s dir \
 	-t deb \
+	-v $(VERSION) \
+	--url $URL \
+	--description $(DESCRIPTION) \
+	--vendor $(VENDOR) \
+	--license $(LICENSE)\
+	--iteration $(ITERATION) \
+	--before-install pkg/$(DISTRO)/before-install.sh \
+	--before-remove  pkg/$(DISTRO)/before-remove.sh \
+	--after-install  pkg/$(DISTRO)/after-install.sh \
+	--config-files $(INIT_DEFAULT_PREFIX)/keyless \
+
+$(DEB_PACKAGE): DESTDIR = build
+$(DEB_PACKAGE): DISTRO = debian
+$(DEB_PACKAGE): clean all install
+	@$(FPM) \
+	--deb-init=$(INIT_DEFAULT_PREFIX)/keyless \
+	--deb-default=$(INIT_DEFAULT_PREFIX)/keyless \
 	--deb-compression bzip2 \
 	--deb-user root --deb-group root \
-	-v $(VERSION) \
-	--iteration $(ITERATION)-$(REVISION) \
-	--before-install pkg/$(OS)/before-install.sh \
-	--before-remove pkg/$(OS)/before-remove.sh \
-	--after-install pkg/$(OS)/after-install.sh \
-	--config-files $(INIT_DEFAULT_PREFIX)/logstash \
+	.
+$(RPM_PACKAGE): DESTDIR = build
+$(RPM_PACKAGE): DISTRO = centos
+$(RPM_PACKAGE): clean all install
+	@$(FPM) \
+	--rpm-use-file-permissions \
+	--rpm-user root --rpm-group root \
+	.
 
-$(DEB_PACKAGE): clean all
-	@mkdir -p $(DEST_PATH)/etc/init.d
-	@mkdir -p $(DEST_PATH)/etc/default
-	@mkdir -p $(DEST_PATH)/etc/keyless/keys
-	@install -m644 pkg/keyless.default $(DEST_PATH)/etc/default/keyless
-	@install -m755 pkg/keyless.sysv $(DEST_PATH)/etc/init.d/keyless
-	@install -m644 pkg/keyless_cacert.pem $(DEST_PATH)/etc/keyless/keyless_cacert.pem
-
-	@mkdir -p $(KSSL_DEST_PATH)
-	@cp o/$(NAME) $(KSSL_DEST_PATH)
-	@$(FPM) -n $(NAME) .
-
-.PHONY: cf-package
-cf-package: $(DEB_PACKAGE)
+.PHONY: package
+package: $(DEB_PACKAGE)
 
 .PHONY: clean-package
 clean-package:
-	@$(RM) -r $(DEST_PATH)
+	@$(RM) -r $(DESTDIR)
 	@$(RM) $(DEB_PACKAGE)
+	@$(RM) $(RPM_PACKAGE)
 
-## end CloudFlare-specific
 
 # Note the use of a # comment at the end of VALGRIND_COMMAND to ensure
 # that there is a trailing space
