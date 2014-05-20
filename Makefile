@@ -110,17 +110,11 @@ $(OPENSSL_DIR): $(call marker,$(TMP))
 	@tar -C $(TMP) -z -x -v -f $(TMP)openssl-$(OPENSSL_VERSION).tar.gz
 	@touch $@
 
-DESTDIR                 = 
-PREFIX                  = usr/local
+PREFIX                  := usr/local
 INSTALL_BIN             = $(DESTDIR)/$(PREFIX)/bin
 INIT_DEFAULT_PREFIX     = $(DESTDIR)/etc/default
 INIT_PREFIX             = $(DESTDIR)/etc/init.d
 CONFIG_PREFIX           = $(DESTDIR)/etc/keyless
-ifeq ($(DISTRO),centos)
-INIT_DEFAULT_PREFIX     = $(DESTDIR)/etc/sysconfig
-else
-INIT_DEFAULT_PREFIX     = $(DESTDIR)/etc/default
-endif
 
 install-all: install install-config
 
@@ -136,15 +130,24 @@ install-config:
 	@install -m755 pkg/keyless.sysv $(INIT_PREFIX)/keyless
 	@install -m644 pkg/keyless_cacert.pem $(CONFIG_PREFIX)/keyless_cacert.pem
 
-VENDOR="CloudFlare"
-LICENSE="TBD"
-URL="http://www.cloudflare.com"
-DESCRIPTION="A reference implementation for CloudFlare's Keyless SSL serve"
-DISTRO      ?= debian
-ARCH    ?= x86_64
+VENDOR := "CloudFlare"
+LICENSE := "TBD"
+URL := "http://www.cloudflare.com"
+DESCRIPTION="A reference implementation for CloudFlare's Keyless SSL server"
 
-DEB_PACKAGE         := $(NAME)_$(VERSION)-$(ITERATION)_x86_64.deb
-RPM_PACKAGE         := $(NAME)-$(VERSION)_$(ITERATION).x86_64.rpm
+# Override DISTRO on the command-line to specify a particular distro
+#
+# e.g. make package DISTRO=debian
+
+DISTRO := debian
+ARCH := x86_64
+
+DEB_PACKAGE := $(NAME)_$(VERSION)-$(ITERATION)_$(ARCH).deb
+RPM_PACKAGE := $(NAME)-$(VERSION)_$(ITERATION).$(ARCH).rpm
+
+# Include distro-specific settings
+
+include Package-$(DISTRO)
 
 FPM = fpm -C $(DESTDIR) \
 	-n $(NAME) \
@@ -155,39 +158,35 @@ FPM = fpm -C $(DESTDIR) \
 	--url $URL \
 	--description $(DESCRIPTION) \
 	--vendor $(VENDOR) \
-	--license $(LICENSE)\
+	--license $(LICENSE) \
 	--iteration $(ITERATION) \
 	--before-install pkg/$(DISTRO)/before-install.sh \
 	--before-remove  pkg/$(DISTRO)/before-remove.sh \
 	--after-install  pkg/$(DISTRO)/after-install.sh \
 	--config-files $(INIT_DEFAULT_PREFIX)/keyless \
 
-$(DEB_PACKAGE): DESTDIR = build
-$(DEB_PACKAGE): DISTRO = debian
-$(DEB_PACKAGE): clean all install
+$(DEB_PACKAGE):
 	@$(FPM) \
 	--deb-init=$(INIT_DEFAULT_PREFIX)/keyless \
 	--deb-default=$(INIT_DEFAULT_PREFIX)/keyless \
 	--deb-compression bzip2 \
 	--deb-user root --deb-group root \
 	.
-$(RPM_PACKAGE): DESTDIR = build
-$(RPM_PACKAGE): DISTRO = centos
-$(RPM_PACKAGE): clean all install
+
+$(RPM_PACKAGE):
 	@$(FPM) \
 	--rpm-use-file-permissions \
 	--rpm-user root --rpm-group root \
 	.
 
 .PHONY: package
-package: $(DEB_PACKAGE)
+package: DESTDIR := build
+package: clean all install $(PACKAGE)
 
 .PHONY: clean-package
 clean-package:
 	@$(RM) -r $(DESTDIR)
-	@$(RM) $(DEB_PACKAGE)
-	@$(RM) $(RPM_PACKAGE)
-
+	@$(RM) $(PACKAGE)
 
 # Note the use of a # comment at the end of VALGRIND_COMMAND to ensure
 # that there is a trailing space
