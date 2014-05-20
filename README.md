@@ -222,7 +222,7 @@ On Debian-based Linuxes:
 
 On Centos:
 
-    sudo yum install gcc
+    sudo yum install gcc automake libtool
     sudo gem install fpm
 
 On OS X (homebrew):
@@ -278,5 +278,5 @@ the keyless server works (at all!):
 
 # License
 
-CloudFlare's Keyless services is licensed under the XXX License - see the LICENSE file for details
+See the LICENSE file for details
 
