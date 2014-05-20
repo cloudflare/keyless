@@ -131,7 +131,7 @@ install-config:
 	@install -m644 pkg/keyless_cacert.pem $(CONFIG_PREFIX)/keyless_cacert.pem
 
 VENDOR := "CloudFlare"
-LICENSE := "TBD"
+LICENSE := "See License File"
 URL := "http://www.cloudflare.com"
 DESCRIPTION="A reference implementation for CloudFlare's Keyless SSL server"
 
