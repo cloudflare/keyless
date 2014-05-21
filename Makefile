@@ -153,7 +153,7 @@ FPM = fpm -C $(DESTDIR) \
 	-n $(NAME) \
 	-a $(ARCH) \
 	-s dir \
-	-t deb \
+	-t $(PACKAGE_TYPE) \
 	-v $(VERSION) \
 	--url $URL \
 	--description $(DESCRIPTION) \

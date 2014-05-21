@@ -1,2 +1,3 @@
 PACKAGE := $(RPM_PACKAGE)
+PACKAGE_TYPE    := rpm
 INIT_DEFAULT_PREFIX = $(DESTDIR)/etc/sysconfig

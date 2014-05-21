@@ -1,2 +1,3 @@
 PACKAGE := $(DEB_PACKAGE)
+PACKAGE_TYPE    := deb
 INIT_DEFAULT_PREFIX = $(DESTDIR)/etc/default
