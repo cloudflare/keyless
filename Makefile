@@ -110,11 +110,12 @@ $(OPENSSL_DIR): $(call marker,$(TMP))
 	@tar -C $(TMP) -z -x -v -f $(TMP)openssl-$(OPENSSL_VERSION).tar.gz
 	@touch $@
 
-PREFIX                  := usr/local
-INSTALL_BIN             = $(DESTDIR)/$(PREFIX)/bin
-INIT_DEFAULT_PREFIX     = $(DESTDIR)/etc/default
-INIT_PREFIX             = $(DESTDIR)/etc/init.d
-CONFIG_PREFIX           = $(DESTDIR)/etc/keyless
+PREFIX                       := usr/local
+INSTALL_BIN                  = $(DESTDIR)/$(PREFIX)/bin
+INIT_DEFAULT_PREFIX          = etc/default
+INIT_DEST_DEFAULT_PREFIX     = $(DESTDIR)/$(INIT_DEFAULT_PREFIX)
+INIT_PREFIX                  = $(DESTDIR)/etc/init.d
+CONFIG_PREFIX                = $(DESTDIR)/etc/keyless
 
 install-all: install install-config
 
@@ -125,8 +126,8 @@ install: all
 install-config:
 	@mkdir -p $(CONFIG_PREFIX)/keys
 	@mkdir -p $(INIT_PREFIX)
-	@mkdir -p $(INIT_DEFAULT_PREFIX)
-	@install -m644 pkg/keyless.default $(INIT_DEFAULT_PREFIX)/keyless
+	@mkdir -p $(INIT_DEST_DEFAULT_PREFIX)
+	@install -m644 pkg/keyless.default $(INIT_DEST_DEFAULT_PREFIX)/keyless
 	@install -m755 pkg/keyless.sysv $(INIT_PREFIX)/keyless
 	@install -m644 pkg/keyless_cacert.pem $(CONFIG_PREFIX)/keyless_cacert.pem
 
