@@ -123,7 +123,7 @@ install: all
 	@install -m755 o/$(NAME) $(INSTALL_BIN)
 
 install-config:
-	@mkdir -p $(CONFIG_PREFIX)
+	@mkdir -p $(CONFIG_PREFIX)/keys
 	@mkdir -p $(INIT_PREFIX)
 	@mkdir -p $(INIT_DEFAULT_PREFIX)
 	@install -m644 pkg/keyless.default $(INIT_DEFAULT_PREFIX)/keyless
@@ -155,7 +155,7 @@ FPM = fpm -C $(DESTDIR) \
 	-s dir \
 	-t $(PACKAGE_TYPE) \
 	-v $(VERSION) \
-	--url $URL \
+	--url $(URL) \
 	--description $(DESCRIPTION) \
 	--vendor $(VENDOR) \
 	--license $(LICENSE) \
