@@ -181,7 +181,12 @@ $(RPM_PACKAGE):
 
 .PHONY: package
 package: DESTDIR := build
-package: clean all install $(PACKAGE)
+package: clean all install-all $(PACKAGE)
+
+.PHONY: cf-package
+cf-package: DESTDIR := build
+cf-package: DISTRO := debian
+cf-package: clean all install $(PACKAGE)
 
 .PHONY: clean-package
 clean-package:
