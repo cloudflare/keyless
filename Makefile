@@ -168,8 +168,6 @@ FPM = fpm -C $(DESTDIR) \
 
 $(DEB_PACKAGE):
 	@$(FPM) \
-	--deb-init=$(INIT_DEFAULT_PREFIX)/keyless \
-	--deb-default=$(INIT_DEFAULT_PREFIX)/keyless \
 	--deb-compression bzip2 \
 	--deb-user root --deb-group root \
 	.
