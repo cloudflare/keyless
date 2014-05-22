@@ -6,8 +6,8 @@
 # These connections must be TLSv1.2. Defaults to 2407.
 #PORT=2407
 
-The IP address of the interface to bind to.
-If missing binds to all available interfaces.
+# The IP address of the interface to bind to.
+# If missing binds to all available interfaces.
 #IP=0.0.0.0
 
 # Path to a PEM-encoded file containing the CA certificate
