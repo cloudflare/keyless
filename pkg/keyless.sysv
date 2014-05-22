@@ -22,12 +22,12 @@ if [ `id -u` -ne 0 ]; then
 fi
 
 name=keyless
-program=/usr/local/bin/kssl_server
+program=/usr/local/bin/keyless
 pidfile="/var/run/$name.pid"
 
 # Optional
 PORT=2407
-IP=173.245.57.57
+IP=0.0.0.0
 CIPHER_LIST=
 NUM_WORKERS=
 
@@ -51,7 +51,6 @@ args="--server-cert=${SERVER_CERT} --server-key=${SERVER_KEY} --private-key-dire
 [ -n "${USER}" ] && [ -n "${GROUP}" ] && USER="${USER}:${GROUP}"
 [ -n "${USER}" ] && args="${args} --user=${USER}"
 
-
 trace() {
   logger -t "/etc/init.d/keyless" "$@"
 }
@@ -63,9 +62,7 @@ emit() {
 
 start() {
 
-  chroot --userspec $USER sh -c "
-    
-    cd \"$chdir\"
+  sh -c "
     exec \"$program\" $args
   " > /var/log/$name.log 2> /var/log/$name.err &
 
