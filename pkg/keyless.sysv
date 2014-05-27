@@ -67,6 +67,24 @@ start() {
     return 1;
   fi
 
+  if [ ! -f "$SERVER_KEY" ]; then
+    if [ ! -d `dirname $SERVER_KEY` ]; then
+      mkdir `dirname $SERVER_KEY` || return 1
+    fi
+
+    if [ ! -d `dirname $SERVER_CERT` ]; then
+      mkdir `$dirname SERVER_CERT` || return 1
+    fi
+
+    openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+      -keyout "$SERVER_KEY" -out "$SERVER_CERT" -batch
+
+    if [ $? -eq 1 ]; then
+      emit "$name failed to generate keypair"
+      return 1;
+    fi
+  fi
+
   sh -c "
     exec \"$program\" $args
   " > /var/log/$name.log 2> /var/log/$name.err &
