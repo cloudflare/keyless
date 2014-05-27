@@ -61,15 +61,28 @@ emit() {
 }
 
 start() {
+  type "$program" >/dev/null 2>/dev/null
+  if [ $? -eq 1 ]; then
+    emit "$name is not installed in $program"
+    return 1;
+  fi
 
   sh -c "
     exec \"$program\" $args
   " > /var/log/$name.log 2> /var/log/$name.err &
 
+  pid=$!
+
+  ps -p $pid >/dev/null 2>/dev/null
+  if [ $? -eq 1 ]; then
+    emit "$name failed to start"
+    return 1;
+  fi
+
   # Generate the pidfile from here. The forked process will also generate
   # a PID.  This prevent a race condition between the pidfile writing
   # and a process possibly asking for status.
-  echo $! > $pidfile
+  echo $pid > $pidfile
 
   emit "$name started"
   return 0
