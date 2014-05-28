@@ -397,6 +397,10 @@ int main(int argc, char *argv[])
   glob_t g;
   const char *starkey = "/*.key";
   char *usergroup = 0;
+  char *user = 0;
+  char *group = 0;
+  struct passwd * pwd = 0;
+  struct group * grp = 0;
   int daemon = 0;
 #endif
 
@@ -517,11 +521,6 @@ int main(int argc, char *argv[])
 
     case 12:
       if (geteuid() == 0) {
-        char *user;
-        char *group;
-        struct passwd * pwd;
-        struct group * grp;
-        
         usergroup = (char *)malloc(strlen(optarg)+1);
         strcpy(usergroup, optarg);
         user = usergroup;
@@ -551,16 +550,6 @@ int main(int argc, char *argv[])
         grp = getgrnam(group);
         if (grp == 0) {
           fatal_error("Unable to find group %s", group);
-        }
-        
-        if (setgid(grp->gr_gid) == -1) {
-          fatal_error("Failed to set group %d (%s)", grp->gr_gid, group);
-        }
-        if (initgroups(user, grp->gr_gid) == -1) {
-          fatal_error("Failed to initgroups %d (%s)", grp->gr_gid, user);
-        }
-        if (setuid(pwd->pw_uid) == -1) {
-          fatal_error("Failed to set user %d (%s)", pwd->pw_uid, user);
         }
       } else {
         fatal_error("The --user can only be used by the root user");
@@ -674,6 +663,29 @@ The following options are not available on Windows systems:\n\
   }
   if (num_workers <= 0 || num_workers > MAX_WORKERS) {
     fatal_error("The --num-workers parameter must between 1 and %d", MAX_WORKERS);
+  }
+
+  if (pid_file) {
+    FILE *fp = fopen(pid_file, "w");
+    if (fp) {
+      fprintf(fp, "%d\n", getpid());
+      fclose(fp);
+    } else {
+      fatal_error("Can't write to pid file %s", pid_file);
+    }
+    free(pid_file);
+  }
+
+  if (usergroup != 0) {
+    if (setgid(grp->gr_gid) == -1) {
+      fatal_error("Failed to set group %d (%s)", grp->gr_gid, group);
+    }
+    if (initgroups(user, grp->gr_gid) == -1) {
+      fatal_error("Failed to initgroups %d (%s)", grp->gr_gid, user);
+    }
+    if (setuid(pwd->pw_uid) == -1) {
+      fatal_error("Failed to set user %d (%s)", pwd->pw_uid, user);
+    }
   }
 
 #if PLATFORM_WINDOWS == 0
@@ -849,18 +861,6 @@ The following options are not available on Windows systems:\n\
   }
 
   tcp_server.data = (void *)ctx;
-
-  if (pid_file) {
-    FILE *fp = fopen(pid_file, "w");
-    if (fp) {
-      fprintf(fp, "%d\n", getpid());
-      fclose(fp);
-    } else {
-      SSL_CTX_free(ctx);
-      fatal_error("Can't write to pid file %s", pid_file);
-    }
-    free(pid_file);
-  }
 
   // Make the worker threads
 
