@@ -407,6 +407,12 @@ int main(int argc, char *argv[])
   uv_signal_t sigterm_watcher;
   ipc_server *p;
 
+  // If this is set to 1 (by the --test command-line option) then the program
+  // will do all work necessary to start but not actually start. The return
+  // code will be 0 if start up would have been successful without --test.
+
+  int test_mode = 0;
+
   const struct option long_options[] = {
     {"port",                  required_argument, 0, 0},
     {"server-cert",           required_argument, 0, 1},
@@ -426,6 +432,7 @@ int main(int argc, char *argv[])
     {"syslog",                no_argument,       0, 14},
     {"version",               no_argument,       0, 15},
 #endif
+    {"test",                  no_argument,       0, 16},
     {0,                       0,                 0, 0}
   };
 
@@ -573,6 +580,10 @@ int main(int argc, char *argv[])
     case 15:
       fatal_error("keyless: %s %s %s", KSSL_VERSION );
       break;
+
+    case 16:
+      test_mode = 1;
+      break;
     }
   }
 
@@ -631,6 +642,10 @@ int main(int argc, char *argv[])
               (optional) Path to a file into which the PID of the keyserver.\n\
               This file is only written if the keyserver starts successfully.\n\
 \n\
+    --test\n\
+              (optional) Run through start up and check all parameters\n\
+              for validity. Returns 0 if configuration is good.\n\
+\n\
 \n\
 The following options are not available on Windows systems:\n\
 \n\
@@ -662,7 +677,7 @@ The following options are not available on Windows systems:\n\
   }
 
 #if PLATFORM_WINDOWS == 0
-  if (daemon) {
+  if (daemon && !test_mode) {
     if (fork() != 0) {
       exit(0);
     }
@@ -736,9 +751,9 @@ The following options are not available on Windows systems:\n\
   free(server_cert);
   free(server_key);
 
-  // Load all the private keys found in the private_key_directory. This only looks for
-  // files that end with .key and the part before the .key is taken to
-  // be the DNS name.
+  // Load all the private keys found in the private_key_directory. This only
+  // looks for files that end with .key and the part before the .key is taken
+  // to be the DNS name.
 
   pattern = (char *)malloc(strlen(private_key_directory)+strlen(starkey)+1);
   strcpy(pattern, private_key_directory);
@@ -912,24 +927,26 @@ The following options are not available on Windows systems:\n\
 
   // The main thread will just wait around for SIGTERM
 
-  rc = uv_signal_init(loop, &sigterm_watcher);
-  if (rc != 0) {
-    SSL_CTX_free(ctx);
-    fatal_error("Failed to create SIGTERM watcher: %s", 
-                error_string(rc));
+  if (!test_mode) {
+    rc = uv_signal_init(loop, &sigterm_watcher);
+    if (rc != 0) {
+      SSL_CTX_free(ctx);
+      fatal_error("Failed to create SIGTERM watcher: %s", 
+                  error_string(rc));
+    }
+    rc = uv_signal_start(&sigterm_watcher, sigterm_cb, SIGTERM);
+    if (rc != 0) {
+      SSL_CTX_free(ctx);
+      fatal_error("Failed to start SIGTERM watcher: %s", 
+                  error_string(rc));
+    }
   }
-  rc = uv_signal_start(&sigterm_watcher, sigterm_cb, SIGTERM);
-  if (rc != 0) {
-    SSL_CTX_free(ctx);
-    fatal_error("Failed to start SIGTERM watcher: %s", 
-                error_string(rc));
-  }
-
-  // Since we'll be running multiple threads OpenSSL needs mutexes
-  // as its state is shared across them.
-
+   
+  // Since we'll be running multiple threads OpenSSL needs mutexes as its
+  // state is shared across them.
+    
   locks = (uv_mutex_t *)malloc(CRYPTO_num_locks() * sizeof(uv_mutex_t));
-
+  
   for ( i = 0; i < CRYPTO_num_locks(); i++) {
     rc = uv_mutex_init(&locks[i]);
     if (rc != 0) {
@@ -938,11 +955,16 @@ The following options are not available on Windows systems:\n\
                   error_string(rc));
     }
   }
-
+  
   CRYPTO_set_id_callback(thread_id_cb);
   CRYPTO_set_locking_callback(locking_cb);
-
-  uv_run(loop, UV_RUN_DEFAULT);
+  
+  // If in test mode never run this loop. This will cause the program to stop
+  // immediately.
+  
+  if (!test_mode) {
+    uv_run(loop, UV_RUN_DEFAULT);
+  }
 
   // Now clean up all the running threads
 
