@@ -179,6 +179,8 @@ This is the keyserver for Keyless SSL. It consists of a single binary file
   to 1.
 - `--pid-file` (optional) Path to a file into which the PID of the
   keyserver. This file is only written if the keyserver starts successfully.
+- `--test` (optional) Run through program start up and check that the keyless
+  server is correctly configured. Returns 0 if good, 1 if an error.
 
 The following options are not available on Windows systems:
 
