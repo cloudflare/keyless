@@ -61,15 +61,46 @@ emit() {
 }
 
 start() {
+  type "$program" >/dev/null 2>/dev/null
+  if [ $? -eq 1 ]; then
+    emit "$name is not installed in $program"
+    return 1;
+  fi
+
+  if [ ! -f "$SERVER_KEY" ]; then
+    if [ ! -d `dirname $SERVER_KEY` ]; then
+      mkdir `dirname $SERVER_KEY` || return 1
+    fi
+
+    if [ ! -d `dirname $SERVER_CERT` ]; then
+      mkdir `$dirname SERVER_CERT` || return 1
+    fi
+
+    openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+      -keyout "$SERVER_KEY" -out "$SERVER_CERT" -batch
+
+    if [ $? -eq 1 ]; then
+      emit "$name failed to generate keypair"
+      return 1;
+    fi
+  fi
 
   sh -c "
     exec \"$program\" $args
-  " > /var/log/$name.log 2> /var/log/$name.err &
+  " >>/var/log/$name.log 2>>/var/log/$name.err &
+
+  pid=$!
+
+  ps -p $pid >/dev/null 2>/dev/null
+  if [ $? -eq 1 ]; then
+    emit "$name failed to start"
+    return 1;
+  fi
 
   # Generate the pidfile from here. The forked process will also generate
   # a PID.  This prevent a race condition between the pidfile writing
   # and a process possibly asking for status.
-  echo $! > $pidfile
+  echo $pid > $pidfile
 
   emit "$name started"
   return 0
