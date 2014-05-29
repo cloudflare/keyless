@@ -46,8 +46,8 @@ args="--server-cert=${SERVER_CERT} --server-key=${SERVER_KEY} --private-key-dire
 
 [ -n "${PORT}" ] && args="${args} --port=${PORT}"
 [ -n "${IP}" ] && args="${args} --ip=${IP}"
-[ -n "${CIPHER_LIST}" ] && args="${args} --port=${CIPHER_LIST}"
-[ -n "${NUM_WORKERS}" ] && args="${args} --port=${NUM_WORKERS}"
+[ -n "${CIPHER_LIST}" ] && args="${args} --cipher-list=${CIPHER_LIST}"
+[ -n "${NUM_WORKERS}" ] && args="${args} --num-workers=${NUM_WORKERS}"
 [ -n "${USER}" ] && [ -n "${GROUP}" ] && USER="${USER}:${GROUP}"
 [ -n "${USER}" ] && args="${args} --user=${USER}"
 
