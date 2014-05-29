@@ -683,6 +683,9 @@ The following options are not available on Windows systems:\n\
 #if PLATFORM_WINDOWS == 0
   if (daemon && !test_mode) {
     int pid = fork();
+    if (pid == -1) {
+      fatal_error("Failed to fork");
+    }
     if (pid != 0) {
       write_pid(pid_file, pid);
       exit(0);
