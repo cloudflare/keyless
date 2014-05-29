@@ -373,6 +373,21 @@ void locking_cb(int mode, int type, const char *file, int line) {
   }
 }
 
+// write_pid: write the current process PID to the file in
+// pid_file. This can be null.
+void write_pid(char *pid_file, int pid) 
+{
+  if (pid_file) {
+    FILE *fp = fopen(pid_file, "w");
+    if (fp) {
+      fprintf(fp, "%d\n", pid);
+      fclose(fp);
+    } else {
+      fatal_error("Can't write to pid file %s", pid_file);
+    }
+  }
+}
+
 int main(int argc, char *argv[])
 {
   int port = 2407;
@@ -665,15 +680,18 @@ The following options are not available on Windows systems:\n\
     fatal_error("The --num-workers parameter must between 1 and %d", MAX_WORKERS);
   }
 
-  if (pid_file) {
-    FILE *fp = fopen(pid_file, "w");
-    if (fp) {
-      fprintf(fp, "%d\n", getpid());
-      fclose(fp);
-    } else {
-      fatal_error("Can't write to pid file %s", pid_file);
+#if PLATFORM_WINDOWS == 0
+  if (daemon && !test_mode) {
+    int pid = fork();
+    if (pid == -1) {
+      fatal_error("Failed to fork");
     }
-    free(pid_file);
+    if (pid != 0) {
+      write_pid(pid_file, pid);
+      exit(0);
+    }
+  } else {
+    write_pid(pid_file, getpid());
   }
 
   if (usergroup != 0) {
@@ -687,13 +705,8 @@ The following options are not available on Windows systems:\n\
       fatal_error("Failed to set user %d (%s)", pwd->pw_uid, user);
     }
   }
-
-#if PLATFORM_WINDOWS == 0
-  if (daemon && !test_mode) {
-    if (fork() != 0) {
-      exit(0);
-    }
-  }
+#else
+  write_pid(pid_file, getpid());
 #endif
 
   SSL_library_init();
@@ -990,6 +1003,10 @@ The following options are not available on Windows systems:\n\
   free(locks);
 
   free(usergroup);
+
+  if (pid_file) {
+    free(pid_file);
+  }
 
   exit(0);
 }
