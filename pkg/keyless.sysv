@@ -42,7 +42,7 @@ GROUP=keyless
 [ -r /etc/default/$name ] && . /etc/default/$name
 [ -r /etc/sysconfig/$name ] && . /etc/sysconfig/$name
 
-args="--server-cert=${SERVER_CERT} --server-key=${SERVER_KEY} --private-key-directory=${PRIVATE_KEY_DIR} --ca-file=${CA_FILE} --daemon --syslog"
+args="--server-cert=${SERVER_CERT} --server-key=${SERVER_KEY} --private-key-directory=${PRIVATE_KEY_DIR} --ca-file=${CA_FILE} --pid-file=${pidfile} --daemon --syslog"
 
 [ -n "${PORT}" ] && args="${args} --port=${PORT}"
 [ -n "${IP}" ] && args="${args} --ip=${IP}"
@@ -85,22 +85,30 @@ start() {
     fi
   fi
 
+  [ -f $pidfile ] && rm -f $pidfile
+
   sh -c "
     exec \"$program\" $args
   " >>/var/log/$name.log 2>>/var/log/$name.err &
 
-  pid=$!
+  wait $!
 
-  ps -p $pid >/dev/null 2>/dev/null
+  for i in 0 1 2 3 4 5; do
+    [ -f $pidfile ] && break
+
+    if [ $i -eq 5 ]; then
+      emit "$name failed to start, missing pid file: $pidfile"
+      return 1
+    fi
+
+    sleep 1
+  done
+
+  ps -p `cat $pidfile` >/dev/null 2>/dev/null
   if [ $? -eq 1 ]; then
     emit "$name failed to start"
     return 1;
   fi
-
-  # Generate the pidfile from here. The forked process will also generate
-  # a PID.  This prevent a race condition between the pidfile writing
-  # and a process possibly asking for status.
-  echo $pid > $pidfile
 
   emit "$name started"
   return 0
