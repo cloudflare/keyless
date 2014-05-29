@@ -375,12 +375,14 @@ void locking_cb(int mode, int type, const char *file, int line) {
 
 // write_pid: write the current process PID to the file in
 // pid_file. This can be null.
-void write_pid(char *pid_file, int pid) 
+void write_pid(char *pid_file, int pid, int write)
 {
   if (pid_file) {
-    FILE *fp = fopen(pid_file, "w");
+    FILE *fp = fopen(pid_file, write ? "w" : "a");
     if (fp) {
-      fprintf(fp, "%d\n", pid);
+      if (write) {
+        fprintf(fp, "%d\n", pid);
+      }
       fclose(fp);
     } else {
       fatal_error("Can't write to pid file %s", pid_file);
@@ -687,11 +689,11 @@ The following options are not available on Windows systems:\n\
       fatal_error("Failed to fork");
     }
     if (pid != 0) {
-      write_pid(pid_file, pid);
+      write_pid(pid_file, pid, !test_mode);
       exit(0);
     }
   } else {
-    write_pid(pid_file, getpid());
+    write_pid(pid_file, getpid(), !test_mode);
   }
 
   if (usergroup != 0) {
@@ -706,7 +708,7 @@ The following options are not available on Windows systems:\n\
     }
   }
 #else
-  write_pid(pid_file, getpid());
+  write_pid(pid_file, getpid(), !test_mode);
 #endif
 
   SSL_library_init();
