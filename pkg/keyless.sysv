@@ -60,6 +60,17 @@ emit() {
   echo "$@"
 }
 
+testconfig() {
+  $program $args --test
+
+  status=$?
+
+  if [ $status -ne 0 ] ; then
+    emit "Test command failed with code $status."
+  fi
+  return $status
+}
+
 start() {
   type "$program" >/dev/null 2>/dev/null
   if [ $? -eq 1 ]; then
@@ -84,6 +95,8 @@ start() {
       return 1;
     fi
   fi
+
+  testconfig || exit $?
 
   [ -f $pidfile ] && rm -f $pidfile
 
@@ -163,7 +176,6 @@ esac
 
 case "$1" in
   force-start)
-    PRESTART=no
     exec "$0" start
     ;;
   start)
@@ -190,8 +202,8 @@ case "$1" in
     exit $code
     ;;
   restart) 
-    
-    stop && start 
+    testconfig || exit $?
+    stop && start
     ;;
   *)
     echo "Usage: $SCRIPTNAME {start|force-start|stop|force-start|force-stop|status|restart}" >&2
