@@ -50,13 +50,11 @@ CFLAGS += -DKSSL_VERSION=\"$(VERSION)-$(REVISION)\"
 #
 # Note that -ldl must appear after OPENSSL_A otherwise the link will fail
 
-ifeq ($(OS),Linux)
-LDLIBS := -lrt
-else
-LDLIBS :=
-endif
+LDLIBS += -L. $(OPENSSL_A) $(LIBUV_A) -ldl -lpthread 
 
-LDLIBS += -lpthread -L. $(OPENSSL_A) $(LIBUV_A) -ldl
+ifeq ($(OS),Linux)
+LDLIBS += -lrt
+endif
 
 # Macros for automatically making directories using marker files.
 # http://www.cmcrossroads.com/ask-mr-make/6936-making-directories-in-gnu-make
