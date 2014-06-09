@@ -41,13 +41,6 @@ R1.3.0-20140609-1014
 - 2014-06-09 Make sure that memory is freed on failure conditions
 - 2014-06-09 Merge pull request #62 from cloudflare/cleanup_memory
 
-
-R1.4.0-20140514-0956
-
-
-R1.3.0-20140514-0940
-
-
 R1.2.0-20140514-0928
 - 2014-05-12 Merge pull request #46 from jgrahamc/master
 - 2014-05-12 Merge pull request #47 from jgrahamc/master
