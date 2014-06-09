@@ -1,3 +1,7 @@
+R1.4.0-20140609-1017
+- 2014-06-09 Fix bad version number because tags not pulled
+
+
 R1.3.0-20140609-1014
 - 2014-05-14 Ensure that 'make kill' always succeeds and cleanup after test suite
 - 2014-05-14 Merge pull request #52 from jgrahamc/master
