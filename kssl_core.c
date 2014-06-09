@@ -35,6 +35,9 @@ kssl_error_code kssl_operate(kssl_header *header,
   zero_operation(&request);
   zero_operation(&response);
 
+  *out_response = 0;
+  *out_response_len = 0;
+
   // Extract the items from the payload
   err = parse_message_payload(payload, header->length, &request);
   if (err != KSSL_ERROR_NONE) {
@@ -131,13 +134,20 @@ exit:
   if (err != KSSL_ERROR_NONE) {
     err = kssl_error(header->id, err, &local_resp, &local_resp_len);
   } else {
+
     // Create output header
+
     out_header.version_maj = KSSL_VERSION_MAJ;
     out_header.version_min = KSSL_VERSION_MIN;
     out_header.id          = header->id;
+
+    // Note that the response in &local_resp is dynamically allocated
+    // and needs to be freed
+
     err = flatten_operation(&out_header, &response, &local_resp,
         &local_resp_len);
   }
+
   if (out_payload != NULL) {
     free(out_payload);
   }
