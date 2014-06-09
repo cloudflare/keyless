@@ -175,6 +175,17 @@ void connection_terminate(uv_tcp_t *tcp)
               error_string(rc));
   }
 
+  while (state->qr != state->qw) {
+    if (state->q[state->qr].start != 0) {
+      free(state->q[state->qr].start);
+    }
+
+    state->qr += 1;
+    if (state->qr == QUEUE_LENGTH) {
+      state->qr = 0;
+    }
+  }
+
   *(state->prev) = state->next;
   if (state->next) {
     state->next->prev = state->prev;
@@ -251,7 +262,7 @@ void clear_read_queue(connection_state *state)
   } while (read > 0);
 }
 
-// wrote_cb: called when a socket wrote has succeeded
+// wrote_cb: called when a socket write has succeeded
 void wrote_cb(uv_write_t* req, int status)
 {
   if (req) {
@@ -273,6 +284,7 @@ int flush_write(connection_state *state)
 
     int rc = uv_write(req, (uv_stream_t*)state->tcp, &buf, 1, wrote_cb);
     if (rc < 0) {
+      free(req);
       return 0;
     }
   }
@@ -411,7 +423,8 @@ int do_ssl(connection_state *state)
     // When we reach here state->header is valid and filled in and if
     // necessary state->start points to the payload.
 
-    err = kssl_operate(&state->header, state->start, privates, &response, &response_len);
+    err = kssl_operate(&state->header, state->start, privates, &response,
+                       &response_len);
     if (err != KSSL_ERROR_NONE) {
       log_err_error();
     } else  {
@@ -509,7 +522,7 @@ void new_connection_cb(uv_stream_t *server, int status)
     }
   }
 
-  // The TCP connection has been accept so now pass it off to a worker
+  // The TCP connection has been accepted so now pass it off to a worker
   // thread to handle
 
   state = (connection_state *)malloc(sizeof(connection_state));
@@ -540,6 +553,7 @@ void new_connection_cb(uv_stream_t *server, int status)
 
   rc = uv_read_start((uv_stream_t*)client, allocate_cb, read_cb);
   if (rc != 0) {
+    uv_close((uv_handle_t *)client, close_cb);
     write_log(1, "Failed to start reading on client connection: %s", 
               error_string(rc));
     return;
