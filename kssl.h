@@ -41,6 +41,12 @@ typedef struct {
 #define KSSL_TAG_OPCODE     0x11 // Requested operation (one of KSSL_OP_*)
 #define KSSL_TAG_PAYLOAD    0x12 // Payload
 
+#define KSSL_TAG_PADDING    0x20 // Padding
+
+// Number of bytes to pad responses to
+
+#define KSSL_PAD_TO 4096
+
 // This structure stores the value of a given tag
 typedef struct {
   BYTE tag;       // Tag to identify contents of item

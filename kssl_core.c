@@ -170,11 +170,26 @@ kssl_error_code kssl_error(DWORD id,
   int size = KSSL_HEADER_SIZE + KSSL_OPCODE_ITEM_SIZE + KSSL_ERROR_ITEM_SIZE;
   BYTE *resp;
 
+  // The operation will always be padded to KSSL_PAD_TO +
+  // KSSL_ITEM_HEADER_SIZE bytes
+
+  int padding_size = 0;
+  if (size < KSSL_PAD_TO) {
+    padding_size = KSSL_PAD_TO - size;
+  }
+
   if (response == NULL || response_len == NULL) {
     return KSSL_ERROR_INTERNAL;
   }
 
-  resp = (BYTE *)malloc(size);
+  size += padding_size + KSSL_ITEM_HEADER_SIZE;
+
+  // The memory is calloced here to ensure that it is all zero. This is
+  // important because the padding added below is done by just adding a
+  // KSSL_ITEM at the end of the message stating that it has N bytes of
+  // padding.
+  
+  resp = (BYTE *)calloc(size, 1);
   if (resp == NULL) {
     return KSSL_ERROR_INTERNAL;
   }
@@ -187,6 +202,7 @@ kssl_error_code kssl_error(DWORD id,
   flatten_header(&e, resp, &offset);
   flatten_item_byte(KSSL_TAG_OPCODE, KSSL_OP_ERROR, resp, &offset);
   flatten_item_byte(KSSL_TAG_PAYLOAD, error, resp, &offset);
+  add_padding(padding_size, resp, &offset);
 
   *response = resp;
   *response_len = size;

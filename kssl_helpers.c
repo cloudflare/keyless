@@ -50,9 +50,12 @@
 
 // parse_header: populates a kssl_header structure from a byte stream. Returns
 // KSSL_ERROR_NONE if successful.
-kssl_error_code parse_header(BYTE *bytes,            // Stream of bytes containing a kssl_header
-                             kssl_header *header) {  // Returns the populated header (must be allocated
-                                                     // by caller)
+kssl_error_code parse_header(BYTE *bytes,            // Stream of bytes
+                                                     // containing a
+                                                     // kssl_header
+                             kssl_header *header) {  // Returns the populated
+                                                     // header (must be
+                                                     // allocated by caller)
   int offset = 0;
 
   if (bytes == NULL || header == NULL) {
@@ -71,11 +74,12 @@ kssl_error_code parse_header(BYTE *bytes,            // Stream of bytes containi
 // NOTE: The payload for the item is not copied, a reference
 // to the original stream is added to the kssl_item struct. The offset
 // is updated if provided. Returns KSSL_ERROR_NONE if successful.
-kssl_error_code parse_item(BYTE *bytes,       // Byte stream to parse kssl_item from
-                           int *offset,       // (optional) if present specifies offset
-                                              // into bytes.
-                           kssl_item *item) { // The kssl_item parsed (must be allocated
-                                              // by caller)
+kssl_error_code parse_item(BYTE *bytes,       // Byte stream to parse
+                                              // kssl_item from
+                           int *offset,       // (optional) if present
+                                              // specifies offset into bytes.
+                           kssl_item *item) { // The kssl_item parsed (must be
+                                              // allocated by caller)
   int local_offset = 0;
   BYTE local_tag;
   WORD local_len;
@@ -108,12 +112,15 @@ kssl_error_code parse_item(BYTE *bytes,       // Byte stream to parse kssl_item 
 // flatten_header: serialize a header into a pre-allocated byte array
 // at a given offset. The offset is updated as bytes are written.  If
 // offset pointer is NULL this function starts at offset 0.
-kssl_error_code flatten_header(kssl_header *header, // Pointer to kssl_header to
-                                                    // serialize
-                               BYTE *bytes,         // Byte buffer to write into
-                                                    // (must be allocated and have
-                                                    // sufficient space for a kssl_header)
-                               int *offset) {       // (optional) offset into bytes to
+kssl_error_code flatten_header(kssl_header *header, // Pointer to kssl_header
+                                                    // to serialize
+                               BYTE *bytes,         // Byte buffer to write
+                                                    // into (must be allocated
+                                                    // and have sufficient
+                                                    // space for a
+                                                    // kssl_header)
+                               int *offset) {       // (optional) offset into
+                                                    // bytes to
   int local_offset = 0;
                                                     // write to
   if (bytes == NULL || header == NULL) {
@@ -140,13 +147,16 @@ kssl_error_code flatten_header(kssl_header *header, // Pointer to kssl_header to
 // byte payload at an offset. The offset is updated as bytes are written.
 // If offset pointer is NULL this function starts at offset 0. Returns
 // KSSL_ERROR_NONE if successful.
-kssl_error_code flatten_item_byte(BYTE tag,      // The kssl_item's tag (see kssl.h)
-                                  BYTE payload , // A single byte for the payload
-                                  BYTE *bytes,   // Buffer into which kssl_item is
-                                                 // written (must be pre-allocated and
-                                                 // have room)
-                                  int *offset) { // (optional) offset into bytes to start
-                                                 // writing at
+kssl_error_code flatten_item_byte(BYTE tag,      // The kssl_item's tag (see
+                                                 // kssl.h)
+                                  BYTE payload , // A single byte for the
+                                                 // payload
+                                  BYTE *bytes,   // Buffer into which
+                                                 // kssl_item is written (must
+                                                 // be pre-allocated and have
+                                                 // room)
+                                  int *offset) { // (optional) offset into
+                                                 // bytes to start writing at
   int local_offset = 0;
   if (bytes == NULL) {
     return KSSL_ERROR_INTERNAL;
@@ -170,11 +180,16 @@ kssl_error_code flatten_item_byte(BYTE tag,      // The kssl_item's tag (see kss
 // flatten_item: Serialize a single kssl_item. The offset is updated
 // as bytes are written. If offset pointer is NULL this function
 // starts at offset 0. Returns KSSL_ERROR_NONE if successful.
-kssl_error_code flatten_item(BYTE tag,         // The kssl_item's tag (see kssl.h)
-                             BYTE *payload,    // Buffer containing the item's payload
-                             WORD payload_len, // Length of data from payload to copy
-                             BYTE *bytes,      // Buffer into which item is serialized
-                             int *offset) {    // (optional) offset into bytes to write from
+kssl_error_code flatten_item(BYTE tag,         // The kssl_item's tag (see
+                                               // kssl.h)
+                             BYTE *payload,    // Buffer containing the item's
+                                               // payload
+                             WORD payload_len, // Length of data from payload
+                                               // to copy
+                             BYTE *bytes,      // Buffer into which item is
+                                               // serialized
+                             int *offset) {    // (optional) offset into bytes
+                                               // to write from
   int local_offset = 0;
 
   if (bytes == NULL) {
@@ -198,11 +213,40 @@ kssl_error_code flatten_item(BYTE tag,         // The kssl_item's tag (see kssl.
   return KSSL_ERROR_NONE;
 }
 
+// add_padding: adds padding bytes to a KSSL message. Assumes that the buffer
+// being written to is calloced.
+kssl_error_code add_padding(WORD size,      // Length of padding
+                            BYTE *bytes,    // Buffer into which item is
+                                            // serialized
+                            int *offset) {  // (optional) offset into bytes
+                                            // to write from
+  int local_offset = 0;
+
+  if (bytes == NULL) {
+    return KSSL_ERROR_INTERNAL;
+  }
+
+  if (offset != NULL) {
+    local_offset = *offset;
+  }
+
+  // Add the padding. This gets added even is padding_size == 0
+
+  WRITE_BYTE(bytes, local_offset, KSSL_TAG_PADDING);
+  WRITE_WORD(bytes, local_offset, size);
+
+  if (offset != NULL) {
+    *offset = local_offset;
+  }
+
+  return KSSL_ERROR_NONE;
+}
+
 // flatten_operation: serialize a kssl_operation
-kssl_error_code flatten_operation(kssl_header *header,       //
-                                  kssl_operation *operation, //
-                                  BYTE **out_operation,      //
-                                  int *length) {             //
+kssl_error_code flatten_operation(kssl_header *header,       
+                                  kssl_operation *operation, 
+                                  BYTE **out_operation,      
+                                  int *length) {             
   int local_req_len;
   BYTE *local_req;
   int offset = 0;
@@ -229,7 +273,22 @@ kssl_error_code flatten_operation(kssl_header *header,       //
     local_req_len += KSSL_ITEM_HEADER_SIZE + operation->ip_len;
   }
 
-  local_req = (BYTE *)malloc(local_req_len);
+  // The operation will always be padded to KSSL_PAD_TO +
+  // KSSL_ITEM_HEADER_SIZE bytes
+
+  int padding_size = 0;
+  if (local_req_len < KSSL_PAD_TO) {
+    padding_size = KSSL_PAD_TO - local_req_len;
+  }
+  
+  local_req_len += KSSL_ITEM_HEADER_SIZE + padding_size;
+
+  // The memory is calloced here to ensure that it is all zero. This is
+  // important because the padding added below is done by just adding a
+  // KSSL_ITEM at the end of the message stating that it has N bytes of
+  // padding. 
+
+  local_req = (BYTE *)calloc(local_req_len, 1);
   if (local_req == NULL) {
     return KSSL_ERROR_INTERNAL;
   }
@@ -253,6 +312,8 @@ kssl_error_code flatten_operation(kssl_header *header,       //
     flatten_item(KSSL_TAG_CLIENT_IP, operation->ip, operation->ip_len,
         local_req, &offset);
   }
+
+  add_padding(padding_size, local_req, &offset);
 
   *out_operation = local_req;
   *length = local_req_len;
@@ -333,6 +394,10 @@ kssl_error_code parse_message_payload(BYTE *payload,               //
         operation->ip_len = temp_item.length;
         operation->ip = temp_item.data;
         operation->is_ip_set = 1;
+        break;
+      }
+      case KSSL_TAG_PADDING:
+      {
         break;
       }
       default:

@@ -89,6 +89,14 @@ kssl_error_code flatten_operation(
   BYTE         **request_out,// request bytes, to be freed by caller
   int           *length);   // length of output
 
+// add_padding: adds padding bytes to a KSSL message. Assumes that the buffer
+// being written to is calloced.
+kssl_error_code add_padding(WORD size,      // Length of padding
+                            BYTE *bytes,    // Buffer into which item is
+                                            // serialized
+                            int *offset);   // (optional) offset into bytes
+                                            // to write from
+
 // Log a summary of the operation
 void log_operation(kssl_header *header, kssl_operation *op);
 

@@ -274,7 +274,7 @@ void wrote_cb(uv_write_t* req, int status)
 // connection. Returns 1 if successful, 0 on error
 int flush_write(connection_state *state)
 {
-#define BUF_SIZE 1024
+#define BUF_SIZE 16384
   char b[BUF_SIZE];
   int n;
 
