@@ -45,7 +45,7 @@ typedef struct {
 
 // Number of bytes to pad responses to
 
-#define KSSL_PAD_TO 4096
+#define KSSL_PAD_TO 1024
 
 // This structure stores the value of a given tag
 typedef struct {
