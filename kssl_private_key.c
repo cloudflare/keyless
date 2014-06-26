@@ -181,7 +181,7 @@ kssl_error_code add_key_from_file(const char *path, // Path to file containing k
     write_log(1, "Failed to open private key file %s", path);
     return KSSL_ERROR_INTERNAL;
   }
-  
+
   err = add_key_from_bio(bp, list);
   if (err != KSSL_ERROR_NONE) {
     write_log(1, "Private RSA key from file %s is not valid", path);
