@@ -1,4 +1,4 @@
-et the base image to debian
+#Set the base image to debian
 FROM debian
 RUN apt-get -y update
 RUN apt-get -y install wget zip unzip
