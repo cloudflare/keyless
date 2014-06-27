@@ -6,6 +6,7 @@ RUN yum install -y git wget zip unzip tar
 RUN yum install -y ruby
 RUN yum install -y ruby-devel
 RUN yum install -y rubygems
+RUN yum install -y rpm-build
 RUN gem install -y fpm
 RUN mkdir /root/.ssh/
 
