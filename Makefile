@@ -125,6 +125,7 @@ install: all
 
 install-config:
 	@mkdir -p $(CONFIG_PREFIX)/keys
+	@chmod 700 $(CONFIG_PREFIX)/keys
 	@mkdir -p $(INIT_PREFIX)
 	@mkdir -p $(INIT_DEST_DEFAULT_PREFIX)
 	@install -m644 pkg/keyless.default $(INIT_DEST_DEFAULT_PREFIX)/keyless
