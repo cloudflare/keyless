@@ -266,6 +266,7 @@ kssl_error_code private_key_operation(pk_list list,         // Private key array
       *size = (unsigned int)s;
     } else {
       rc = KSSL_ERROR_CRYPTO_FAILED;
+      ERR_clear_error();
     }
   } else {
     if (RSA_sign(opcode_to_digest_nid(opcode), message, length, out, size,
