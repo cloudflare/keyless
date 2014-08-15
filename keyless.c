@@ -121,6 +121,11 @@ void sigterm_cb(uv_signal_t *w, int signum)
   }
 }
 
+void sigpipe_cb(uv_signal_t *w, int signum)
+{
+  write_log(1, "Received SIGPIPE signal");
+}
+
 // thread_stop_cb: called via async_* to stop a thread
 void thread_stop_cb(uv_async_t* handle) {
   worker_data *worker = (worker_data *)handle->data;
@@ -953,6 +958,12 @@ The following options are not available on Windows systems:\n\
     if (rc != 0) {
       SSL_CTX_free(ctx);
       fatal_error("Failed to start SIGTERM watcher: %s", 
+                  error_string(rc));
+    }
+    rc = uv_signal_start(&sigterm_watcher, sigpipe_cb, SIGPIPE);
+    if (rc != 0) {
+      SSL_CTX_free(ctx);
+      fatal_error("Failed to start SIGPIPE watcher: %s", 
                   error_string(rc));
     }
   }
