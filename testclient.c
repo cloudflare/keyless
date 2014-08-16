@@ -321,7 +321,7 @@ kssl_header *kssl(SSL *ssl, kssl_header *k, kssl_operation *r)
   BYTE buf[KSSL_HEADER_SIZE];
   BYTE *req;
   int req_len;
-  unsigned int n;
+  int n;
   kssl_header h;
   kssl_header *to_return;
 
@@ -331,7 +331,7 @@ kssl_header *kssl(SSL *ssl, kssl_header *k, kssl_operation *r)
   dump_request(r);
 
   n = SSL_write(ssl, req, req_len);
-  if (n != (unsigned int)req_len) {
+  if (n != req_len) {
     fatal_error("Failed to send KSSL header");
   }
 
@@ -402,6 +402,144 @@ kssl_header *kssl(SSL *ssl, kssl_header *k, kssl_operation *r)
   }
 
   return to_return;
+}
+
+void kssl_write(SSL *ssl, kssl_header *k, kssl_operation *r) {
+  BYTE *req;
+  int req_len, n;
+
+  flatten_operation(k, r, &req, &req_len);
+
+  dump_header(k, "send");
+  dump_request(r);
+
+  n = SSL_write(ssl, req, req_len);
+  if (n != req_len) {
+      fatal_error("Failed to send KSSL header");
+  }
+  free(req);
+}
+
+kssl_header* kssl_read(SSL *ssl, kssl_header *k, kssl_operation *r) {
+  kssl_header h, *to_return;
+  BYTE buf[KSSL_HEADER_SIZE];
+  int n;
+
+  while (1) {
+    n = SSL_read(ssl, buf, KSSL_HEADER_SIZE);
+    if (n <= 0) {
+      int x = SSL_get_error(ssl, n);
+      if (x == SSL_ERROR_WANT_READ || x == SSL_ERROR_WANT_WRITE) {
+        continue;
+      } else if (x == SSL_ERROR_ZERO_RETURN) {
+        fatal_error("Connection closed while reading header\n");
+      } else {
+        fatal_error("Error performing SSL_read: %x\n", x);
+      }
+    } else {
+      if (n != KSSL_HEADER_SIZE) {
+        fatal_error("Error receiving KSSL header, size: %d", n);
+      }
+    }
+    break;
+  }
+  
+  parse_header(buf, &h);
+  if (h.version_maj != KSSL_VERSION_MAJ) {
+    fatal_error("Version mismatch %d != %d", h.version_maj, KSSL_VERSION_MAJ);
+  }
+  if (k->id != h.id) {
+    fatal_error("ID mismatch %08x != %08x", k->id, h.id);
+  }
+
+  dump_header(&h, "recv");
+
+  to_return = (kssl_header *)malloc(sizeof(kssl_header));
+  memcpy(to_return, &h, sizeof(kssl_header));
+
+  to_return->data = 0;
+  if (h.length > 0) {
+    BYTE *payload = (BYTE *)malloc(h.length);
+    while (1) {
+      n = SSL_read(ssl, payload, h.length);
+      if (n <= 0) {
+        int x = SSL_get_error(ssl, n);
+        if (x == SSL_ERROR_WANT_READ || x == SSL_ERROR_WANT_WRITE) {
+          continue;
+        } else if (x == SSL_ERROR_ZERO_RETURN) {
+          fatal_error("Connection closed while reading payload\n");
+        } else {
+          fatal_error("Error performing SSL_read: %x\n", x);
+        }
+      } else {
+        if (n != h.length) {
+          fatal_error("Error receiving KSSL payload, size: %d", n);
+        }
+      }
+
+      break;
+    }
+
+    if (n != h.length) {
+      fatal_error("Failed to read payload got length %d wanted %d", n, h.length);
+    }
+
+    dump_payload(h.length, payload);
+    to_return->data = payload;
+  }
+
+  return to_return;
+}
+
+// verify response, only verify kssl header currently
+// TODO: verify different kssl payload 
+int verify_response(kssl_header* k, kssl_operation* r, kssl_header* resp_k) {
+    test_assert(resp_k->id == k->id);
+    test_assert(resp_k->version_maj == KSSL_VERSION_MAJ);
+    // TODO: add other verification logic here
+    return 1;
+}
+
+// send and read pipeline requests and responses
+void kssl_pipeline(SSL *ssl, kssl_header *k, kssl_operation *r, int repeat) {
+    int i, cur_gap, max_gap = 300;
+    int w_count = 0, r_count = 0;
+    long int increment;
+    kssl_header *to_return;
+    
+    srand((unsigned int) time(NULL));
+
+    while (w_count < repeat || r_count < repeat) {
+        cur_gap = w_count - r_count;
+
+        // pipeline write
+        increment = (random() % max_gap);
+        if ((increment + cur_gap) > max_gap) {
+            increment = max_gap - cur_gap;
+        }
+        if ((increment + w_count) > repeat) {
+            increment = repeat - w_count;
+        }
+        for (i = 0; i < increment; i++) {
+            kssl_write(ssl, k, r);
+            w_count += 1;
+        }
+
+        // pipeline read
+        increment = (random() % max_gap);
+        if ((r_count + increment) > w_count) {
+            increment = w_count - r_count;
+        }
+        for (i = 0; i < increment; i++) {
+            to_return = kssl_read(ssl, k, r);
+            verify_response(k, r, to_return);
+            if (to_return->data) {
+                free(to_return->data);
+            }
+            free(to_return);
+            r_count += 1;
+        }
+    }
 }
 
 typedef struct {
@@ -568,6 +706,30 @@ void kssl_repeat_op_ping(connection *c, int repeat)
     free(h->data);
     free(h);
   }
+  ok(0);
+  free(payload);
+}
+
+void kssl_pipeline_op_ping(connection *c, int repeat)
+{
+  char hello[255];
+  kssl_header echo1;
+  kssl_operation req;
+  BYTE *payload = malloc(255 + 1);
+
+  test("Pipeline KSSL_OP_PING %d times (%p)", repeat, c);
+  echo1.version_maj = KSSL_VERSION_MAJ;
+  echo1.id = 0x12345679;
+  zero_operation(&req);
+  req.is_opcode_set = 1;
+  req.is_payload_set = 1;
+  req.opcode = KSSL_OP_PING;
+  req.payload_len = 255 + 1;
+  req.payload = payload;
+  sprintf(hello, "Hello, World! Pipeline");
+  memcpy((char *)payload, hello, strlen(hello)+1);
+  req.payload_len = strlen(hello)+1;
+  kssl_pipeline(c->ssl, &echo1, &req, repeat);
   ok(0);
   free(payload);
 }
@@ -748,6 +910,48 @@ void kssl_repeat_op_rsa_sign(connection *c, RSA *private, int repeat, int opcode
   }
 }
 
+void kssl_pipeline_op_rsa_sign(connection *c, RSA *private, int repeat, int opcode)
+{
+  #define ALGS_COUNT 6
+  int algs[ALGS_COUNT] = {KSSL_OP_RSA_SIGN_MD5SHA1, KSSL_OP_RSA_SIGN_SHA1, KSSL_OP_RSA_SIGN_SHA224,
+                          KSSL_OP_RSA_SIGN_SHA256, KSSL_OP_RSA_SIGN_SHA384, KSSL_OP_RSA_SIGN_SHA512};
+
+  // These are totally bogus but they have the right lengths (and, anyway, who's to say these aren't real
+  // message digests?)
+
+  char* digests[ALGS_COUNT] = { "123456789012345678901234567890123456",                              // MD5SH1 is 36 bytes
+                                "12345678901234567890",                                              // SHA1 is 20 bytes
+                                "1234567890123456789012345678",                                      // SHA224 is 28 bytes
+                                "12345678901234567890123456789012",                                  // SHA256 is 32 bytes
+                                "123456789012345678901234567890123456789012345678",                  // SHA384 is 48 bytes
+                                "1234567890123456789012345678901212345678901234567890123456789012"}; // SHA512 is 64 bytes
+
+  int i;
+  for (i = 0; i < ALGS_COUNT; i++) {
+    kssl_header sign;
+    kssl_operation req;
+
+    if (opcode != algs[i]) continue;
+    sign.version_maj = KSSL_VERSION_MAJ;
+    sign.id = 0x1234567a;
+    zero_operation(&req);
+    req.is_opcode_set = 1;
+    req.is_payload_set = 1;
+    req.is_digest_set = 1;
+    req.is_ip_set = 1;
+    req.ip = ipv4;
+    req.ip_len = 4;
+    req.digest = malloc(KSSL_DIGEST_SIZE);
+    digest_public_modulus(private, req.digest);
+    req.payload = (BYTE *)digests[i];
+    req.payload_len = strlen(digests[i]);
+    req.opcode = algs[i];
+
+    kssl_pipeline(c->ssl, &sign, &req, repeat);
+    free(req.digest);
+  }
+}
+
 void kssl_op_rsa_decrypt_bad_data(connection *c, RSA *private)
 {
   char *kryptos2 = "It was totally invisible, how's that possible?";
@@ -902,6 +1106,14 @@ void thread_repeat_rsa_sign(void *ptr) {
 
   connection *c1 = ssl_connect(data->ctx, data->port);
   kssl_repeat_op_rsa_sign(c1, data->private, data->repeat, data->alg);
+  ssl_disconnect(c1);
+}
+
+void thread_pipeline_rsa_sign(void *ptr) {
+  signing_data *data = (signing_data*)ptr;
+
+  connection *c1 = ssl_connect(data->ctx, data->port);
+  kssl_pipeline_op_rsa_sign(c1, data->private, data->repeat, data->alg);
   ssl_disconnect(c1);
 }
 
@@ -1184,6 +1396,7 @@ int main(int argc, char *argv[])
 
   c3 = ssl_connect(ctx, port);
   kssl_repeat_op_ping(c3, 18);
+  kssl_pipeline_op_ping(c3, 1000);
   ssl_disconnect(c3);
 
   if (!health) {
@@ -1253,6 +1466,50 @@ int main(int argc, char *argv[])
 
       thread_cleanup();
     }
+
+    // pipeline request tests
+    {
+
+      for (i = 0; i < ALGS_COUNT; i++) {
+        gettimeofday(&start, NULL);
+        c0 = ssl_connect(ctx, port);
+        kssl_pipeline_op_rsa_sign(c0, private, LOOP_COUNT, algs[i]);
+        ssl_disconnect(c0);
+        gettimeofday(&stop, NULL);
+        printf("\n %d pipeline %s requests takes %ld ms\n", LOOP_COUNT, opstring(algs[i]),
+            (stop.tv_sec - start.tv_sec) * 1000 +
+            (stop.tv_usec - start.tv_usec) / 1000);
+      }
+    }
+
+    // 2 threads for pipeline request
+    {
+      uv_thread_t thread[LOOP_COUNT];
+      signing_data data[LOOP_COUNT];
+      thread_setup();
+
+      for (i = 0; i < ALGS_COUNT; i++) {
+        gettimeofday(&start, NULL);
+        for (j = 0; j < 2; j++) {
+          data[j].ctx = ctx;
+          data[j].private = private;
+          data[j].port = port;
+          data[j].repeat = LOOP_COUNT/2;
+          data[j].alg = algs[i];
+          uv_thread_create(&thread[j], thread_pipeline_rsa_sign, (void *)&data[j]);
+        }
+        for (j = 0; j < 2; j++) {
+          uv_thread_join(&thread[j]);
+        }
+        gettimeofday(&stop, NULL);
+        printf("\n %d pipeline requests %s over 2 threads takes %ld ms\n", LOOP_COUNT, opstring(algs[i]),
+          (stop.tv_sec - start.tv_sec) * 1000 +
+          (stop.tv_usec - start.tv_usec) / 1000);
+      }
+
+      thread_cleanup();
+    }
+
 #if !PLATFORM_WINDOWS
     // Test requests over multiple processes
     {
