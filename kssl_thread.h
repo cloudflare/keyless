@@ -13,6 +13,7 @@ extern void new_connection_cb(uv_stream_t *server, int status);
 extern void log_err_error();
 extern void log_ssl_error(SSL *ssl, int rc);
 extern pk_list privates;
+extern uv_rwlock_t *pk_lock;
 
 // This structure holds information about a single 'worker' (a thread)
 

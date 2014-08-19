@@ -89,14 +89,110 @@ const char * error_string(int e)
   return strerror(-e);
 }
 
+// This structure is used to store a private key and the SHA256 hash
+// of the modulus of the public key which it is associated with.
+pk_list privates = 0;
+char *pk_dir = NULL;
+uv_rwlock_t *pk_lock;
+SSL_CTX *g_ctx;
+
+// Load all the private keys found in the pk_dir. This only
+// looks for files that end with .key and the part before the .key is taken
+// to be the DNS name.
+static void load_private_keys(SSL_CTX *ctx) {
+  char *pattern;
+  int rc, privates_count, i;
+#if PLATFORM_WINDOWS
+  WIN32_FIND_DATA FindFileData;
+  HANDLE hFind;
+  const char *starkey = "\\*.key";
+#else
+  glob_t g;
+  const char *starkey = "/*.key";
+#endif
+  uv_rwlock_wrlock(pk_lock);
+
+  pattern = (char *)malloc(strlen(pk_dir) + strlen(starkey) + 1);
+  strcpy(pattern, pk_dir);
+  strcat(pattern, starkey);
+
+#if PLATFORM_WINDOWS
+  hFind = FindFirstFile(pattern, &FindFileData);
+  if (hFind == INVALID_HANDLE_VALUE) {
+    SSL_CTX_free(ctx);
+    fatal_error("Error %d finding private keys in %s", rc, pk_dir);
+  }
+
+  // count the number of files
+  privates_count = 1;
+  while (FindNextFile(hFind, &FindFileData) != 0) {
+    privates_count++;
+  }
+  FindClose(hFind);
+
+  privates = new_pk_list(privates_count);
+  if (privates == NULL) {
+    SSL_CTX_free(ctx);
+    fatal_error("Failed to allocate room for private keys");
+  }
+
+  hFind = FindFirstFile(pattern, &FindFileData);
+  for (i = 0; i < privates_count; ++i) {
+    char* path = (char *)malloc(strlen(pk_dir) + 1 +
+                                strlen(FindFileData.cFileName) + 1);
+    strcpy(path, pk_dir);
+    strcat(path, "\\");
+    strcat(path, FindFileData.cFileName);
+    if (add_key_from_file(path, privates) != 0) {
+      SSL_CTX_free(ctx);
+      fatal_error("Failed to add private keys");
+    }
+    FindNextFile(hFind, &FindFileData);
+    free(path);
+  }
+  FindClose(hFind);
+#else
+  g.gl_pathc  = 0;
+  g.gl_offs   = 0;
+
+  rc = glob(pattern, GLOB_NOSORT, 0, &g);
+
+  if (rc != 0) {
+    SSL_CTX_free(ctx);
+    fatal_error("Error %d finding private keys in %s", rc, pk_dir);
+  }
+
+  if (g.gl_pathc == 0) {
+    SSL_CTX_free(ctx);
+    fatal_error("Failed to find any private keys in %s", pk_dir);
+  }
+
+  privates_count = g.gl_pathc;
+  privates = new_pk_list(privates_count);
+  if (privates == NULL) {
+    SSL_CTX_free(ctx);
+    fatal_error("Failed to allocate room for private keys");
+  }
+
+  for (i = 0; i < privates_count; ++i) {
+    write_log(0, "loading key: %s", g.gl_pathv[i]);
+    if (add_key_from_file(g.gl_pathv[i], privates) != 0) {
+      SSL_CTX_free(ctx);
+      fatal_error("Failed to add private keys");
+    }
+  }
+
+  globfree(&g);
+#endif
+
+  free(pattern);
+  uv_rwlock_wrunlock(pk_lock);
+}
+
 // This defines the maximum number of workers to create
 
 #define DEFAULT_WORKERS 1
 #define MAX_WORKERS 32
-
-// This structure is used to store a private key and the SHA256 hash
-// of the modulus of the public key which it is associated with.
-pk_list privates = 0;
 
 int num_workers = DEFAULT_WORKERS;
 
@@ -105,6 +201,13 @@ worker_data worker[MAX_WORKERS];
 // This is the TCP connection on which we listen for TLS connections
 
 uv_tcp_t tcp_server;
+
+// sighup_cb: handle SIGHUP and reload files on disk.
+void sighup_cb(uv_signal_t *w, int signum)
+{
+  free_pk_list(privates);
+  load_private_keys(g_ctx);
+}
 
 // sigterm_cb: handle SIGTERM and terminates program cleanly. The
 // actual termination is handled in main once the uv_run has
@@ -157,14 +260,14 @@ void ipc_read2_cb(uv_stream_t* handle,
     if (type == UV_TCP) {
       int rc = uv_tcp_init(loop, client->handle);
       if (rc != 0) {
-	write_log(1, "Failed to create TCP handle in thread: %s", 
-		  error_string(rc));
+        write_log(1, "Failed to create TCP handle in thread: %s",
+            error_string(rc));
       } else {
-	rc = uv_accept(handle, (uv_stream_t *)client->handle);
-	if (rc != 0) {
-	  write_log(1, "Failed to uv_accept in thread: %s",
-		    error_string(rc));
-	}
+        rc = uv_accept(handle, (uv_stream_t *)client->handle);
+        if (rc != 0) {
+          write_log(1, "Failed to uv_accept in thread: %s",
+              error_string(rc));
+        }
       }
     } else {
       write_log(1, "Wrong handle type in IPC");
@@ -264,7 +367,7 @@ void thread_entry(void *data) {
   uv_loop_delete(loop);
 }
 
-// cleanup: cleanup state.
+// cleanup: clean up state.
 void cleanup(uv_loop_t *loop, SSL_CTX *ctx, pk_list privates)
 {
   SSL_CTX_free(ctx);
@@ -283,6 +386,10 @@ void cleanup(uv_loop_t *loop, SSL_CTX *ctx, pk_list privates)
   ERR_free_strings();
 
   uv_loop_delete(loop);
+
+  uv_rwlock_destroy(pk_lock);
+  free(pk_dir);
+  free(pk_lock);
 }
 
 typedef struct {
@@ -326,12 +433,12 @@ void ipc_connection_cb(uv_stream_t *pipe, int status) {
 
   rc = uv_pipe_init(loop, (uv_pipe_t*)&peer->pipe, 1);
   if (rc != 0) {
-    write_log(1, "Failed to create client pipe: %s", 
+    write_log(1, "Failed to create client pipe: %s",
               error_string(rc));
   } else {
     rc = uv_accept(pipe, (uv_stream_t*)&peer->pipe);
     if (rc != 0) {
-      write_log(1, "Failed to accept pipe connection: %s", 
+      write_log(1, "Failed to accept pipe connection: %s",
                 error_string(rc));
     } else {
       peer->write_req.data = (void *)peer;
@@ -340,7 +447,7 @@ void ipc_connection_cb(uv_stream_t *pipe, int status) {
                      &buf, 1, (uv_stream_t*)server->server,
                      ipc_write_cb);
       if (rc != 0) {
-        write_log(1, "Failed to write server handle to pipe: %s", 
+        write_log(1, "Failed to write server handle to pipe: %s",
                   error_string(rc));
       }
     }
@@ -397,7 +504,7 @@ int main(int argc, char *argv[])
   char *server_cert = 0;
   char *server_key = 0;
   char *private_key_directory = 0;
-  char * default_cipher_list = "ECDHE-RSA-AES128-SHA256:AES128-GCM-SHA256:RC4:HIGH:!MD5:!aNULL:!EDH";
+  char *default_cipher_list = "ECDHE-RSA-AES128-SHA256:AES128-GCM-SHA256:RC4:HIGH:!MD5:!aNULL:!EDH";
   char *cipher_list = 0;
   char *ca_file = 0;
   char *pid_file = 0;
@@ -405,14 +512,7 @@ int main(int argc, char *argv[])
 
   const SSL_METHOD *method;
   SSL_CTX *ctx;
-  char *pattern;
-#if PLATFORM_WINDOWS
-  WIN32_FIND_DATA FindFileData;
-  HANDLE hFind;
-  const char *starkey = "\\*.key";
-#else
-  glob_t g;
-  const char *starkey = "/*.key";
+#if !PLATFORM_WINDOWS
   char *usergroup = 0;
   char *user = 0;
   char *group = 0;
@@ -421,11 +521,12 @@ int main(int argc, char *argv[])
   int daemon = 0;
 #endif
 
-  int rc, privates_count, i;
+  int rc, i;
   struct sockaddr_in addr;
   STACK_OF(X509_NAME) *cert_names;
   uv_loop_t *loop;
   uv_signal_t sigterm_watcher;
+  uv_signal_t sighup_watcher;
   ipc_server *p;
 
   // If this is set to 1 (by the --test command-line option) then the program
@@ -547,23 +648,23 @@ int main(int argc, char *argv[])
         } else {
           *group = '\0';
           group += 1;
-          
+
           // This is checking for a : at the end of the parameter (e.g.
           // username:) and treats it as username:username
-          
+
           if (*group == '\0') {
             group = 0;
           }
         }
-          
+
         // Verify that the user and group are valid and obtain the IDs that
         // will be necessary for switching to them.
-        
+
         pwd = getpwnam(user);
         if (pwd == 0) {
           fatal_error("Unable to find user %s", user);
         }
-        
+
         grp = getgrnam(group);
         if (grp == 0) {
           fatal_error("Unable to find group %s", group);
@@ -584,7 +685,7 @@ int main(int argc, char *argv[])
 #endif
 
     case 15:
-      fatal_error("keyless: %s %s %s", KSSL_VERSION );
+      fatal_error("keyless: %s %s %s", KSSL_VERSION);
       break;
 
     case 16:
@@ -778,90 +879,27 @@ The following options are not available on Windows systems:\n\
   free(server_cert);
   free(server_key);
 
-  // Load all the private keys found in the private_key_directory. This only
-  // looks for files that end with .key and the part before the .key is taken
-  // to be the DNS name.
-
-  pattern = (char *)malloc(strlen(private_key_directory)+strlen(starkey)+1);
-  strcpy(pattern, private_key_directory);
-  strcat(pattern, starkey);
-
-#if PLATFORM_WINDOWS
-  hFind = FindFirstFile(pattern, &FindFileData);
-  if (hFind == INVALID_HANDLE_VALUE) {
+  // Create lock and load private keys
+  pk_lock = (uv_rwlock_t *)malloc(sizeof(uv_rwlock_t));
+  if (pk_lock == NULL) {
     SSL_CTX_free(ctx);
-    fatal_error("Error %d finding private keys in %s", rc, private_key_directory);
+    fatal_error("Memory error");
   }
-
-  // count the number of files
-  privates_count = 1;
-  while (FindNextFile(hFind, &FindFileData) != 0) {
-    privates_count++;
-  }
-  FindClose(hFind);
-
-  privates = new_pk_list(privates_count);
-  if (privates == NULL) {
-    SSL_CTX_free(ctx);
-    fatal_error("Failed to allocate room for private keys");
-  }
-
-  hFind = FindFirstFile(pattern, &FindFileData);
-  for (i = 0; i < privates_count; ++i) {
-    char* path = (char *)malloc(strlen(private_key_directory)+1+strlen(FindFileData.cFileName)+1);
-    strcpy(path, private_key_directory);
-    strcat(path, "\\");
-    strcat(path, FindFileData.cFileName);
-    if (add_key_from_file(path, privates) != 0) {
-      SSL_CTX_free(ctx);
-      fatal_error("Failed to add private keys");
-    }
-    FindNextFile(hFind, &FindFileData);
-    free(path);
-  }
-  FindClose(hFind);
-#else
-  g.gl_pathc  = 0;
-  g.gl_offs   = 0;
-
-  rc = glob(pattern, GLOB_NOSORT, 0, &g);
-
+  rc = uv_rwlock_init(pk_lock);
   if (rc != 0) {
     SSL_CTX_free(ctx);
-    fatal_error("Error %d finding private keys in %s", rc, private_key_directory);
+    fatal_error("Can't initialize lock");
   }
+  pk_dir = private_key_directory;
+  load_private_keys(ctx);
 
-  if (g.gl_pathc == 0) {
-    SSL_CTX_free(ctx);
-    fatal_error("Failed to find any private keys in %s", private_key_directory);
-  }
-
-  free(private_key_directory);
-
-  privates_count = g.gl_pathc;
-  privates = new_pk_list(privates_count);
-  if (privates == NULL) {
-    SSL_CTX_free(ctx);
-    fatal_error("Failed to allocate room for private keys");
-  }
-
-  for (i = 0; i < privates_count; ++i) {
-    if (add_key_from_file(g.gl_pathv[i], privates) != 0) {
-      SSL_CTX_free(ctx);
-      fatal_error("Failed to add private keys");
-    }
-  }
-
-  free(pattern);
-  globfree(&g);
-#endif
-
+  // Begin application loop
   loop = uv_loop_new();
 
   rc = uv_tcp_init(loop, &tcp_server);
   if (rc != 0) {
     SSL_CTX_free(ctx);
-    fatal_error("Failed to create TCP server: %s", 
+    fatal_error("Failed to create TCP server: %s",
                 error_string(rc));
   }
 
@@ -878,12 +916,11 @@ The following options are not available on Windows systems:\n\
   tcp_server.data = (void *)ctx;
 
   // Make the worker threads
-
   for (i = 0; i < num_workers; i++) {
     rc = uv_sem_init(&worker[i].semaphore, 0);
     if (rc != 0) {
       SSL_CTX_free(ctx);
-      fatal_error("Failed to create semaphore: %s", 
+      fatal_error("Failed to create semaphore: %s",
                   error_string(rc));
     }
 
@@ -893,7 +930,7 @@ The following options are not available on Windows systems:\n\
                           &worker[i]);
     if (rc != 0) {
       SSL_CTX_free(ctx);
-      fatal_error("Failed to create worker thread: %s", 
+      fatal_error("Failed to create worker thread: %s",
                   error_string(rc));
     }
   }
@@ -909,13 +946,13 @@ The following options are not available on Windows systems:\n\
   rc = uv_pipe_init(loop, &p->pipe, 1);
   if (rc != 0) {
       SSL_CTX_free(ctx);
-      fatal_error("Failed to create parent pipe: %s", 
+      fatal_error("Failed to create parent pipe: %s",
                   error_string(rc));
   }
   rc = uv_pipe_bind(&p->pipe, PIPE_NAME);
   if (rc != 0) {
       SSL_CTX_free(ctx);
-      fatal_error("Failed to bind pipe to name %s: %s", PIPE_NAME, 
+      fatal_error("Failed to bind pipe to name %s: %s", PIPE_NAME,
                   error_string(rc));
   }
   p->pipe.data = (void *)p;
@@ -923,7 +960,7 @@ The following options are not available on Windows systems:\n\
                  ipc_connection_cb);
   if (rc != 0) {
     SSL_CTX_free(ctx);
-    fatal_error("Failed to listen on pipe: %s", 
+    fatal_error("Failed to listen on pipe: %s",
                 error_string(rc));
   }
 
@@ -941,42 +978,58 @@ The following options are not available on Windows systems:\n\
   }
 
   // The main thread will just wait around for SIGTERM
-
   if (!test_mode) {
     rc = uv_signal_init(loop, &sigterm_watcher);
     if (rc != 0) {
       SSL_CTX_free(ctx);
-      fatal_error("Failed to create SIGTERM watcher: %s", 
+      fatal_error("Failed to create SIGTERM watcher: %s",
                   error_string(rc));
     }
     rc = uv_signal_start(&sigterm_watcher, sigterm_cb, SIGTERM);
     if (rc != 0) {
       SSL_CTX_free(ctx);
-      fatal_error("Failed to start SIGTERM watcher: %s", 
+      fatal_error("Failed to start SIGTERM watcher: %s",
                   error_string(rc));
     }
   }
-   
+
+  // The main thread will wait for SIGHUP to reload
+  if (!test_mode) {
+    rc = uv_signal_init(loop, &sighup_watcher);
+    if (rc != 0) {
+      SSL_CTX_free(ctx);
+      fatal_error("Failed to create SIGHUP watcher: %s",
+                  error_string(rc));
+    }
+    g_ctx = ctx;
+    rc = uv_signal_start(&sighup_watcher, sighup_cb, SIGHUP);
+    if (rc != 0) {
+      SSL_CTX_free(ctx);
+      fatal_error("Failed to start SIGHUP watcher: %s",
+                  error_string(rc));
+    }
+  }
+
   // Since we'll be running multiple threads OpenSSL needs mutexes as its
   // state is shared across them.
-    
+
   locks = (uv_mutex_t *)malloc(CRYPTO_num_locks() * sizeof(uv_mutex_t));
-  
+
   for ( i = 0; i < CRYPTO_num_locks(); i++) {
     rc = uv_mutex_init(&locks[i]);
     if (rc != 0) {
       SSL_CTX_free(ctx);
-      fatal_error("Failed to create mutex: %s", 
+      fatal_error("Failed to create mutex: %s",
                   error_string(rc));
     }
   }
-  
+
   CRYPTO_set_id_callback(thread_id_cb);
   CRYPTO_set_locking_callback(locking_cb);
-  
+
   // If in test mode never run this loop. This will cause the program to stop
   // immediately.
-  
+
   if (!test_mode) {
     uv_run(loop, UV_RUN_DEFAULT);
   }
@@ -986,12 +1039,12 @@ The following options are not available on Windows systems:\n\
   for (i = 0; i < num_workers; i++) {
     rc = uv_async_send(&worker[i].stopper);
     if (rc != 0) {
-      write_log(1, "Failed to send stop async message: %s", 
+      write_log(1, "Failed to send stop async message: %s",
                 error_string(rc));
     }
     rc = uv_thread_join(&worker[i].thread);
     if (rc != 0) {
-      write_log(1, "Thread join failed: %s", 
+      write_log(1, "Thread join failed: %s",
                 error_string(rc));
     }
     uv_sem_destroy(&worker[i].semaphore);
@@ -999,7 +1052,7 @@ The following options are not available on Windows systems:\n\
 
   cleanup(loop, ctx, privates);
 
-  for ( i = 0; i < CRYPTO_num_locks(); i++) {
+  for (i = 0; i < CRYPTO_num_locks(); i++) {
     uv_mutex_destroy(&locks[i]);
   }
   free(locks);

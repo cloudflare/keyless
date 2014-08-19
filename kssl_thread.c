@@ -423,6 +423,7 @@ int do_ssl(connection_state *state)
     // When we reach here state->header is valid and filled in and if
     // necessary state->start points to the payload.
 
+    uv_rwlock_rdlock(pk_lock);
     err = kssl_operate(&state->header, state->start, privates, &response,
                        &response_len);
     if (err != KSSL_ERROR_NONE) {
@@ -430,6 +431,7 @@ int do_ssl(connection_state *state)
     } else  {
       queue_write(state, response, response_len);
     }
+    uv_rwlock_rdunlock(pk_lock);
 
     // When this point is reached a complete header (and optional
     // payload) have been received and processed by the switch()
