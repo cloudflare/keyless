@@ -239,11 +239,10 @@ kssl_error_code write_queued_messages(connection_state *state)
         log_ssl_error(ssl, rc);
         return KSSL_ERROR_INTERNAL;
       }
-    }
 
     // On any error condition leave the send loop
-
-    break;
+      break;
+    }
   }
 
   return KSSL_ERROR_NONE;
@@ -441,7 +440,6 @@ int do_ssl(connection_state *state)
     free_read_state(state);
     set_get_header_state(state);
 
-    return 1;
   }
 
   return 1;
