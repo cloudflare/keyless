@@ -1,3 +1,19 @@
+R1.5.0-20140909-1415
+- 2014-06-10 Update keyless.default
+- 2014-06-12 Merge branch 'master' of github.com:cloudflare/keyless
+- 2014-06-12 Pad good/bad response to 4,096 bytes
+- 2014-06-13 Change from 4,096 to 1,024 byte padding since that's plenty of room
+- 2014-06-25 KEY-19 - Reload keys on SIGHUP
+- 2014-07-17 Add -dev to the version if this is not a release
+- 2014-08-09 Fixed bug of processing pipelined keyless requests.
+- 2014-08-09 Handle SSL internal error from RSA decryption.
+- 2014-08-15 add SIGPIPE handler
+- 2014-08-16 add pipeline request test
+- 2014-08-19 Merge pull request #65 from cloudflare/KEY-19
+- 2014-09-08 Merge pull request #69 from cdnsec/bugfix
+- 2014-09-09 Fix broken pipelining when more than 16 messages queued
+
+
 R1.4.0-20140609-1017
 - 2014-06-09 Fix bad version number because tags not pulled
 
