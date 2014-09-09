@@ -432,14 +432,16 @@ int do_ssl(connection_state *state)
     }
     uv_rwlock_rdunlock(pk_lock);
 
-    // When this point is reached a complete header (and optional
-    // payload) have been received and processed by the switch()
-    // statement above. So free the allocated memory and get ready to
-    // receive another header.
+    // When this point is reached a complete header (and optional payload)
+    // have been received and processed by the switch() statement above. So,
+    // write the queued messages and then free the allocated memory and get
+    // ready to receive another header.
+
+    write_queued_messages(state);
+    flush_write(state);
 
     free_read_state(state);
     set_get_header_state(state);
-
   }
 
   return 1;
