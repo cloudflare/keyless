@@ -1242,7 +1242,11 @@ int main(int argc, char *argv[])
     fatal_error("Failed to set cipher list: %s", cipher_list);
   }
 
+<<<<<<< HEAD
+  int nid = OBJ_sn2nid(ec_curve_name);
+=======
   int nid = OBJ_sn2nid(ec_curve_name); //409;
+>>>>>>> 20ce2bc... Updated authoritative cipher_list and added ECDSA curve (NIST P-256). Removed --cipher-list command line argument.
   if (NID_undef == nid) {
     SSL_CTX_free(ctx);
     fatal_error("ECDSA curve not present");
