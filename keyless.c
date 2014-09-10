@@ -509,9 +509,8 @@ int main(int argc, char *argv[])
   char *server_cert = 0;
   char *server_key = 0;
   char *private_key_directory = 0;
-  const char * cipher_list = "ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384";
-  const char * ec_curve_name = "prime256v1";
-
+  char *default_cipher_list = "ECDHE-RSA-AES128-SHA256:AES128-GCM-SHA256:RC4:HIGH:!MD5:!aNULL:!EDH";
+  char *cipher_list = 0;
   char *ca_file = 0;
   char *pid_file = 0;
   int parsed;
@@ -546,20 +545,21 @@ int main(int argc, char *argv[])
     {"server-cert",           required_argument, 0, 1},
     {"server-key",            required_argument, 0, 2},
     {"private-key-directory", required_argument, 0, 3},
-    {"ca-file",               required_argument, 0, 4},
-    {"silent",                no_argument,       0, 5},
-    {"verbose",               no_argument,       0, 6},
-    {"pid-file",              required_argument, 0, 7},
-    {"num-workers",           optional_argument, 0, 8},
-    {"help",                  no_argument,       0, 9},
-    {"ip",                    required_argument, 0, 10},
+    {"cipher-list",           required_argument, 0, 4},
+    {"ca-file",               required_argument, 0, 5},
+    {"silent",                no_argument,       0, 6},
+    {"verbose",               no_argument,       0, 7},
+    {"pid-file",              required_argument, 0, 8},
+    {"num-workers",           optional_argument, 0, 9},
+    {"help",                  no_argument,       0, 10},
+    {"ip",                    required_argument, 0, 11},
 #if PLATFORM_WINDOWS == 0
-    {"user",                  required_argument, 0, 11},
-    {"daemon",                no_argument,       0, 12},
-    {"syslog",                no_argument,       0, 13},
-    {"version",               no_argument,       0, 14},
+    {"user",                  required_argument, 0, 12},
+    {"daemon",                no_argument,       0, 13},
+    {"syslog",                no_argument,       0, 14},
+    {"version",               no_argument,       0, 15},
 #endif
-    {"test",                  no_argument,       0, 15},
+    {"test",                  no_argument,       0, 16},
     {0,                       0,                 0, 0}
   };
 
@@ -601,32 +601,37 @@ int main(int argc, char *argv[])
       break;
 
     case 4:
+      cipher_list = (char *)malloc(strlen(optarg)+1);
+      strcpy(cipher_list, optarg);
+      break;
+
+    case 5:
       ca_file = (char *)malloc(strlen(optarg)+1);
       strcpy(ca_file, optarg);
       break;
 
-    case 5:
+    case 6:
       silent = 1;
       break;
 
-    case 6:
+    case 7:
       verbose = 1;
       break;
 
-    case 7:
+    case 8:
       pid_file = (char *)malloc(strlen(optarg)+1);
       strcpy(pid_file, optarg);
       break;
 
-    case 8:
+    case 9:
       num_workers = atoi(optarg);
       break;
 
-    case 9:
+    case 10:
       help = 1;
       break;
 
-    case 10:
+    case 11:
       if (inet_pton(AF_INET, optarg, &addr.sin_addr) != 1) {
         fatal_error("The --ip parameter must be a valid IPv4 address");
       }
@@ -637,7 +642,7 @@ int main(int argc, char *argv[])
       // The --user parameter can be in the form username:group or
       // username. The latter will be equivalent to username:username.
 
-    case 11:
+    case 12:
       if (geteuid() == 0) {
         usergroup = (char *)malloc(strlen(optarg)+1);
         strcpy(usergroup, optarg);
@@ -674,21 +679,21 @@ int main(int argc, char *argv[])
       }
       break;
 
-    case 12:
+    case 13:
       daemon = 1;
       break;
 
-    case 13:
+    case 14:
       use_syslog = 1;
       break;
 
 #endif
 
-    case 14:
+    case 15:
       fatal_error("keyless: %s %s %s", KSSL_VERSION);
       break;
 
-    case 15:
+    case 16:
       test_mode = 1;
       break;
     }
@@ -823,30 +828,22 @@ The following options are not available on Windows systems:\n\
     ssl_error();
   }
 
-  // Set the context to ask for a peer (i.e. client certificate on connection)
-  // and to refuse connections that do not have a client certificate. The client
+  // Set a specific cipher list that comes from the command-line and then set
+  // the context to ask for a peer (i.e. client certificate on connection) and
+  // to refuse connections that do not have a client certificate. The client
   // certificate must be signed by the CA in the --ca-file parameter.
+
+  if (cipher_list == 0) {
+    cipher_list = default_cipher_list;
+  }
 
   if (SSL_CTX_set_cipher_list(ctx, cipher_list) == 0) {
     SSL_CTX_free(ctx);
     fatal_error("Failed to set cipher list %s", cipher_list);
   }
 
-  int nid = OBJ_sn2nid(ec_curve_name);
-  if (NID_undef == nid) {
-    SSL_CTX_free(ctx);
-    fatal_error("ECDSA curve not present");
-  }
-
-  EC_KEY *ecdh = EC_KEY_new_by_curve_name(nid);
-  if (NULL == ecdh) {
-    SSL_CTX_free(ctx);
-    fatal_error("ECDSA new curve error");
-  }
-
-  if(SSL_CTX_set_tmp_ecdh(ctx, ecdh) != 1) {
-    SSL_CTX_free(ctx);
-    fatal_error("Call to SSL_CTX_set_tmp_ecdh failed");
+  if (cipher_list != default_cipher_list) {
+    free(cipher_list);
   }
 
   SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, 0);

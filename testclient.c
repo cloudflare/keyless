@@ -1135,8 +1135,7 @@ int main(int argc, char *argv[])
   struct timeval stop, start;
   int algs[ALGS_COUNT] = {KSSL_OP_RSA_SIGN_MD5SHA1, KSSL_OP_RSA_SIGN_SHA1, KSSL_OP_RSA_SIGN_SHA224,
                           KSSL_OP_RSA_SIGN_SHA256, KSSL_OP_RSA_SIGN_SHA384, KSSL_OP_RSA_SIGN_SHA512};
-  const char * cipher_list = "ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384";
-  const char * ec_curve_name = "prime256v1";
+  const char * cipher_list = "ECDHE-RSA-AES128-SHA256:AES128-GCM-SHA256:RC4:HIGH:!MD5:!aNULL:!EDH";
 
   const struct option long_options[] = {
     {"port",        required_argument, 0, 0},
@@ -1240,27 +1239,6 @@ int main(int argc, char *argv[])
   if (SSL_CTX_set_cipher_list(ctx, cipher_list) == 0) {
     SSL_CTX_free(ctx);
     fatal_error("Failed to set cipher list: %s", cipher_list);
-  }
-
-<<<<<<< HEAD
-  int nid = OBJ_sn2nid(ec_curve_name);
-=======
-  int nid = OBJ_sn2nid(ec_curve_name); //409;
->>>>>>> 20ce2bc... Updated authoritative cipher_list and added ECDSA curve (NIST P-256). Removed --cipher-list command line argument.
-  if (NID_undef == nid) {
-    SSL_CTX_free(ctx);
-    fatal_error("ECDSA curve not present");
-  }
-
-  EC_KEY *ecdh = EC_KEY_new_by_curve_name(nid);
-  if (NULL == ecdh) {
-    SSL_CTX_free(ctx);
-    fatal_error("ECDSA new curve error");
-  }
-
-  if(SSL_CTX_set_tmp_ecdh(ctx, ecdh) != 1) {
-    SSL_CTX_free(ctx);
-    fatal_error("Call to SSL_CTX_set_tmp_ecdh failed");
   }
 
   SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, 0);
