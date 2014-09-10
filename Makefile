@@ -202,7 +202,12 @@ endif
 PORT := $(shell perl free-port.pl)
 PID_FILE := $(TMP)$(NAME).pid
 SERVER_LOG := $(TMP)$(NAME).log
-CA_FILE := CA/cacert.pem
+
+KEYS_DIR := testing/keys
+
+SERVER_CERT := testing/server-cert/ecdsa/ecdsa-server.pem
+SERVER_KEY := testing/server-cert/ecdsa/ecdsa-server-key.pem
+KEYLESS_CACERT := testing/CAs/testca-keyless.pem
 ifneq ($(wildcard $(PID_FILE)),)
 PID := $(shell cat $(PID_FILE))
 run: ; @echo $(NAME) running as PID $(PID)
@@ -215,7 +220,7 @@ run: all $(call marker,$(TMP))
 ifeq ($(VALGRIND),1)
 	@rm -f $(VALGRIND_LOG)
 endif
-	@$(VALGRIND_COMMAND)$(OBJ)$(NAME) --port=$(PORT) --server-cert=server-cert/cert.pem --server-key=server-cert/key.pem --private-key-directory=keys --ca-file=$(CA_FILE) --pid-file=$(PID_FILE) --num-workers=4 --daemon --silent
+	@$(VALGRIND_COMMAND)$(OBJ)$(NAME) --port=$(PORT) --server-cert=$(SERVER_CERT) --server-key=$(SERVER_KEY) --private-key-directory=$(KEYS_DIR) --ca-file=$(KEYLESS_CACERT) --pid-file=$(PID_FILE) --num-workers=4 --daemon --silent
 ifeq ($(VALGRIND),1)
 	@echo $$! > $(PID_FILE)
 endif
@@ -228,6 +233,12 @@ endif
 # presence or absence of the $(NAME).pid file (see above) and thus
 # it's necessary to restart make for them to do the right thing.
 
+CLIENT_CERT := testing/client-cert/ecdsa/ecdsa-client.pem
+CLIENT_KEY := testing/client-cert/ecdsa/ecdsa-client-key.pem
+RSA_CLIENT_CERT := testing/client-cert/rsa/rsa-client.pem
+RSA_CLIENT_KEY := testing/client-cert/rsa/rsa-client-key.pem
+KEYSERVER_CACERT := testing/CAs/testca-keyserver.pem
+
 .PHONY: test-short
 test-short: TEST_PARAMS := --short
 test-short: test
@@ -238,7 +249,8 @@ test: all
 	@$(MAKE) --no-print-directory run VALGRIND=$(VALGRIND) PORT=$(PORT)
 	@perl -e 'while (!-e "$(PID_FILE)") { sleep(1); }'
 	@sleep 1
-	@$(OBJ)testclient --port=$(PORT) --private-key=keys/private.key --client-cert=client-cert/cert.pem --client-key=client-cert/key.pem --ca-file=$(CA_FILE) $(DEBUG) --server=localhost $(TEST_PARAMS)
+	@$(OBJ)testclient --port=$(PORT) --private-key=$(KEYS_DIR)/private.key --client-cert=$(CLIENT_CERT) --client-key=$(CLIENT_KEY) --ca-file=$(KEYSERVER_CACERT) $(DEBUG) --server=localhost $(TEST_PARAMS)
+	@$(OBJ)testclient --port=$(PORT) --private-key=$(KEYS_DIR)/private.key --client-cert=$(RSA_CLIENT_CERT) --client-key=$(RSA_CLIENT_KEY) --ca-file=$(KEYSERVER_CACERT) $(DEBUG) --server=localhost $(TEST_PARAMS)
 	@$(MAKE) --no-print-directory kill
 ifeq ($(VALGRIND),1)
 	@echo valgrind log in $(VALGRIND_LOG)
