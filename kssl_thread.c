@@ -442,6 +442,9 @@ int do_ssl(connection_state *state)
 
     free_read_state(state);
     set_get_header_state(state);
+
+    // Loop around again in case there are multiple requests queued
+    // up by OpenSSL. 
   }
 
   return 1;
