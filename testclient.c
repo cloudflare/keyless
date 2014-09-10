@@ -1035,7 +1035,8 @@ connection *ssl_connect(SSL_CTX *ctx, int port)
   rc = SSL_connect(c->ssl);
   if (rc != 1) {
     ERR_print_errors_fp(stderr);
-    fatal_error("TLS handshake error %d/%d\n", rc, SSL_get_error(c->ssl, rc));
+    fatal_error("TLS handshake error %d/%d/%d\n", rc,
+                SSL_get_error(c->ssl, rc), errno);
   }
 
   return c;
