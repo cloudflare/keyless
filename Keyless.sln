@@ -1,9 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 11.00
 # Visual C++ Express 2010
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "keyless", "Keyless.vcxproj", "{34858BEA-8EF0-E20E-9872-CE728DEF6318}"
-EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "testclient", "..\kssl_testclient\kssl_testclient.vcxproj", "{D9D2B7E2-B2D2-4F28-8C0F-0DAB406B9253}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "keyless", "Keyless.vcxproj", "{7D326BD3-FC19-7214-8BA1-4DCD961606E7}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -12,18 +10,12 @@ Global
 		Test|Win32 = Test|Win32
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
-		{34858BEA-8EF0-E20E-9872-CE728DEF6318}.Debug|Win32.ActiveCfg = Debug|Win32
-		{34858BEA-8EF0-E20E-9872-CE728DEF6318}.Debug|Win32.Build.0 = Debug|Win32
-		{34858BEA-8EF0-E20E-9872-CE728DEF6318}.Release|Win32.ActiveCfg = Release|Win32
-		{34858BEA-8EF0-E20E-9872-CE728DEF6318}.Release|Win32.Build.0 = Release|Win32
-		{34858BEA-8EF0-E20E-9872-CE728DEF6318}.Test|Win32.ActiveCfg = Test|Win32
-		{34858BEA-8EF0-E20E-9872-CE728DEF6318}.Test|Win32.Build.0 = Test|Win32
-		{D9D2B7E2-B2D2-4F28-8C0F-0DAB406B9253}.Debug|Win32.ActiveCfg = Debug|Win32
-		{D9D2B7E2-B2D2-4F28-8C0F-0DAB406B9253}.Debug|Win32.Build.0 = Debug|Win32
-		{D9D2B7E2-B2D2-4F28-8C0F-0DAB406B9253}.Release|Win32.ActiveCfg = Release|Win32
-		{D9D2B7E2-B2D2-4F28-8C0F-0DAB406B9253}.Release|Win32.Build.0 = Release|Win32
-		{D9D2B7E2-B2D2-4F28-8C0F-0DAB406B9253}.Test|Win32.ActiveCfg = Release|Win32
-		{D9D2B7E2-B2D2-4F28-8C0F-0DAB406B9253}.Test|Win32.Build.0 = Release|Win32
+		{7D326BD3-FC19-7214-8BA1-4DCD961606E7}.Debug|Win32.ActiveCfg = Debug|Win32
+		{7D326BD3-FC19-7214-8BA1-4DCD961606E7}.Debug|Win32.Build.0 = Debug|Win32
+		{7D326BD3-FC19-7214-8BA1-4DCD961606E7}.Release|Win32.ActiveCfg = Release|Win32
+		{7D326BD3-FC19-7214-8BA1-4DCD961606E7}.Release|Win32.Build.0 = Release|Win32
+		{7D326BD3-FC19-7214-8BA1-4DCD961606E7}.Test|Win32.ActiveCfg = Test|Win32
+		{7D326BD3-FC19-7214-8BA1-4DCD961606E7}.Test|Win32.Build.0 = Test|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

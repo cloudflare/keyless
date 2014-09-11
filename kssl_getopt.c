@@ -633,6 +633,10 @@ getopt_long_only(int nargc, char * const *nargv, const char *options,
 #else
   #define DELTA_EPOCH_IN_MICROSECS  11644473600000000ULL
 #endif
+#if PLATFORM_WINDOWS
+#include <winsock2.h>
+#endif
+
 
 struct timezone
 {

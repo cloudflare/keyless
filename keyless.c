@@ -101,12 +101,13 @@ SSL_CTX *g_ctx;
 // to be the DNS name.
 static void load_private_keys(SSL_CTX *ctx) {
   char *pattern;
-  int rc, privates_count, i;
+  int privates_count, i;
 #if PLATFORM_WINDOWS
   WIN32_FIND_DATA FindFileData;
   HANDLE hFind;
   const char *starkey = "\\*.key";
 #else
+  int rc;
   glob_t g;
   const char *starkey = "/*.key";
 #endif
@@ -120,7 +121,7 @@ static void load_private_keys(SSL_CTX *ctx) {
   hFind = FindFirstFile(pattern, &FindFileData);
   if (hFind == INVALID_HANDLE_VALUE) {
     SSL_CTX_free(ctx);
-    fatal_error("Error %d finding private keys in %s", rc, pk_dir);
+    fatal_error("Error %d finding private keys in %s", hFind, pk_dir);
   }
 
   // count the number of files
@@ -553,7 +554,7 @@ int main(int argc, char *argv[])
     {"num-workers",           optional_argument, 0, 9},
     {"help",                  no_argument,       0, 10},
     {"ip",                    required_argument, 0, 11},
-#if PLATFORM_WINDOWS == 0
+#if !PLATFORM_WINDOWS
     {"user",                  required_argument, 0, 12},
     {"daemon",                no_argument,       0, 13},
     {"syslog",                no_argument,       0, 14},
@@ -637,7 +638,7 @@ int main(int argc, char *argv[])
       }
       break;
 
-#if PLATFORM_WINDOWS == 0
+#if !PLATFORM_WINDOWS
 
       // The --user parameter can be in the form username:group or
       // username. The latter will be equivalent to username:username.
@@ -690,7 +691,7 @@ int main(int argc, char *argv[])
 #endif
 
     case 15:
-      fatal_error("keyless: %s %s %s", KSSL_VERSION);
+      fatal_error("keyless: %s", KSSL_VERSION);
       break;
 
     case 16:
@@ -788,7 +789,7 @@ The following options are not available on Windows systems:\n\
     fatal_error("The --num-workers parameter must between 1 and %d", MAX_WORKERS);
   }
 
-#if PLATFORM_WINDOWS == 0
+#if !PLATFORM_WINDOWS
   if (daemon && !test_mode) {
     int pid = fork();
     if (pid == -1) {
@@ -996,12 +997,14 @@ The following options are not available on Windows systems:\n\
       fatal_error("Failed to start SIGTERM watcher: %s",
                   error_string(rc));
     }
+#if !PLATFORM_WINDOWS
     rc = uv_signal_start(&sigterm_watcher, sigpipe_cb, SIGPIPE);
     if (rc != 0) {
       SSL_CTX_free(ctx);
       fatal_error("Failed to start SIGPIPE watcher: %s", 
                   error_string(rc));
     }
+#endif
   }
 
   // The main thread will wait for SIGHUP to reload
@@ -1068,7 +1071,9 @@ The following options are not available on Windows systems:\n\
   }
   free(locks);
 
+#if !PLATFORM_WINDOWS
   free(usergroup);
+#endif
 
   if (pid_file) {
     free(pid_file);

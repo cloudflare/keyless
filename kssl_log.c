@@ -34,9 +34,15 @@ void write_log(int e,                // If set this is an error message
   char * newfmt;
   va_list l;
 
-  if ((silent && !use_syslog) || (!e && !verbose)) {
-    return;
+#if PLATFORM_WINDOWS == 0
+  if (silent && !use_syslog) {
+	  return;
   }
+#endif
+  if (!e && !verbose) {
+	  return;
+  }
+
 
   // +1 for the terminating 0
   // +1 for the \n we append in non-syslog mode
