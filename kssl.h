@@ -34,8 +34,8 @@ typedef struct {
 
 // Possible item tags
 
-#define KSSL_TAG_DIGEST     0x01 // An RSA key digest (see
-                                 // digest_public_modulus)
+#define KSSL_TAG_DIGEST     0x01 // An public key digest (see
+                                 // digest_public_key)
 #define KSSL_TAG_SNI        0x02 // Server name (optional)
 #define KSSL_TAG_CLIENT_IP  0x03 // Client IP (4 bytes for IPv4, 16 for IPv6)
 #define KSSL_TAG_OPCODE     0x11 // Requested operation (one of KSSL_OP_*)
@@ -71,6 +71,13 @@ typedef struct {
 #define KSSL_OP_RSA_SIGN_SHA256      0x05
 #define KSSL_OP_RSA_SIGN_SHA384      0x06
 #define KSSL_OP_RSA_SIGN_SHA512      0x07
+#define KSSL_OP_ECDSA_MASK           0x10
+#define KSSL_OP_ECDSA_SIGN_MD5SHA1   0x12
+#define KSSL_OP_ECDSA_SIGN_SHA1      0x13
+#define KSSL_OP_ECDSA_SIGN_SHA224    0x14
+#define KSSL_OP_ECDSA_SIGN_SHA256    0x15
+#define KSSL_OP_ECDSA_SIGN_SHA384    0x16
+#define KSSL_OP_ECDSA_SIGN_SHA512    0x17
 
 // Used to send a block of data back to the client (in response, for
 // example, to a KSSL_OP_RSA_DECRYPT)

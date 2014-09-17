@@ -80,6 +80,12 @@ kssl_error_code kssl_operate(kssl_header *header,
     case KSSL_OP_RSA_SIGN_SHA256:
     case KSSL_OP_RSA_SIGN_SHA384:
     case KSSL_OP_RSA_SIGN_SHA512:
+    case KSSL_OP_ECDSA_SIGN_MD5SHA1:
+    case KSSL_OP_ECDSA_SIGN_SHA1:
+    case KSSL_OP_ECDSA_SIGN_SHA224:
+    case KSSL_OP_ECDSA_SIGN_SHA256:
+    case KSSL_OP_ECDSA_SIGN_SHA384:
+    case KSSL_OP_ECDSA_SIGN_SHA512:
     {
       unsigned int payload_size;
       int max_payload_size;
