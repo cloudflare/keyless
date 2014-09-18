@@ -26,11 +26,11 @@
 // Path to a PEM-encoded file containing the CA certificate used to verify
 // server certificates presented on connection.
 // 
-// --private-key
+// --rsa-pubkey
 //
-// The filename of an RSA private key file (PEM encoded) that is used for
-// testing. This must be one of the private keys specified in the
-// kssl_server's --private-key-directory.
+// The filename of an RSA rsa_pubkey key file (PEM encoded) that is used for
+// testing. This must be one of the rsa_pubkey keys specified in the
+// kssl_server's --rsa_pubkey-key-directory.
 //
 // --debug
 //
@@ -47,6 +47,7 @@
 
 #include "kssl.h"
 #include "kssl_helpers.h"
+#include "kssl_private_key.h"
 
 #if PLATFORM_WINDOWS
 #include <winsock2.h>
@@ -163,11 +164,11 @@ void fatal_error(const char *fmt, ...)
   exit(1);
 }
 
-// digest_public_modulus: calculates the SHA256 digest of the
+// digest_public_rsa: calculates the SHA256 digest of the
 // hexadecimal representation of the public modulus of an RSA
 // key. digest must be initialized with at least 32 bytes of
 // space.
-void digest_public_modulus(RSA *key, BYTE *digest)
+void digest_public_rsa(RSA *key, BYTE *digest)
 {
   // QUESTION: can we use a single EVP_MD_CTX for multiple
   // digests?
@@ -761,7 +762,7 @@ void kssl_op_ping_bad_version(connection *c)
   ok(h);
 }
 
-void kssl_op_rsa_decrypt(connection *c, RSA *private)
+void kssl_op_rsa_decrypt(connection *c, RSA *rsa_pubkey)
 {
   static int count = 0;
   char kryptos2[255];
@@ -779,17 +780,17 @@ void kssl_op_rsa_decrypt(connection *c, RSA *private)
   req.is_ip_set = 1;
   req.ip = ipv6;
   req.ip_len = 16;
-  req.payload = malloc(RSA_size(private));
-  req.payload_len = RSA_size(private);
+  req.payload = malloc(RSA_size(rsa_pubkey));
+  req.payload_len = RSA_size(rsa_pubkey);
   req.digest = malloc(KSSL_DIGEST_SIZE);
-  digest_public_modulus(private, req.digest);
+  digest_public_rsa(rsa_pubkey, req.digest);
   req.opcode = KSSL_OP_RSA_DECRYPT;
   sprintf(kryptos2, "%02x It was totally invisible, how's that possible?", count);
   count += 1;
 
   size = RSA_public_encrypt(strlen(kryptos2), (unsigned char *)kryptos2,
                                 (unsigned char *)req.payload,
-                                private, RSA_PKCS1_PADDING);
+                                rsa_pubkey, RSA_PKCS1_PADDING);
   if (size == -1) {
     fatal_error("Failed to RSA encrypt");
   }
@@ -806,31 +807,48 @@ void kssl_op_rsa_decrypt(connection *c, RSA *private)
   free(req.digest);
 }
 
-void kssl_op_rsa_sign(connection *c, RSA *private, int opcode)
+#define ALGS_COUNT 6
+
+// RSA signing algorithm opcodes
+static int rsa_algs[ALGS_COUNT] = {
+  KSSL_OP_RSA_SIGN_MD5SHA1,
+  KSSL_OP_RSA_SIGN_SHA1,
+  KSSL_OP_RSA_SIGN_SHA224,
+  KSSL_OP_RSA_SIGN_SHA256,
+  KSSL_OP_RSA_SIGN_SHA384,
+  KSSL_OP_RSA_SIGN_SHA512,
+};
+
+// OpenSSL digest NIDs 
+static int nid[ALGS_COUNT] = {
+  NID_md5_sha1,
+  NID_sha1,
+  NID_sha224,
+  NID_sha256,
+  NID_sha384,
+  NID_sha512,
+};
+
+// These are totally bogus but they have the right lengths (and, anyway, who's to say these aren't real
+// message digests?)
+static char* digests[ALGS_COUNT] = {
+  "123456789012345678901234567890123456",                              // MD5SH1 is 36 bytes
+  "12345678901234567890",                                              // SHA1 is 20 bytes
+  "1234567890123456789012345678",                                      // SHA224 is 28 bytes
+  "12345678901234567890123456789012",                                  // SHA256 is 32 bytes
+  "123456789012345678901234567890123456789012345678",                  // SHA384 is 48 bytes
+  "1234567890123456789012345678901234567890123456789012345678901234",  // SHA512 is 64 bytes
+};
+
+void kssl_op_rsa_sign(connection *c, RSA *rsa_pubkey, int opcode)
 {
-  #define ALGS_COUNT 6
-  int algs[ALGS_COUNT] = {KSSL_OP_RSA_SIGN_MD5SHA1, KSSL_OP_RSA_SIGN_SHA1, KSSL_OP_RSA_SIGN_SHA224,
-                          KSSL_OP_RSA_SIGN_SHA256, KSSL_OP_RSA_SIGN_SHA384, KSSL_OP_RSA_SIGN_SHA512};
-  int nids[ALGS_COUNT] = {NID_md5_sha1, NID_sha1, NID_sha224, NID_sha256, NID_sha384, NID_sha512};
-
-  // These are totally bogus but they have the right lengths (and, anyway, who's to say these aren't real
-  // message digests?)
-
-  char* digests[ALGS_COUNT] = {
-      "123456789012345678901234567890123456",                              // MD5SH1 is 36 bytes
-      "12345678901234567890",                                              // SHA1 is 20 bytes
-      "1234567890123456789012345678",                                      // SHA224 is 28 bytes
-      "12345678901234567890123456789012",                                  // SHA256 is 32 bytes
-      "123456789012345678901234567890123456789012345678",                  // SHA384 is 48 bytes
-      "1234567890123456789012345678901234567890123456789012345678901234"}; // SHA512 is 64 bytes
-
   int i, rc;
   kssl_header *h;
   test("KSSL_OP_RSA_SIGN_* (%p)", c);
   for (i = 0; i < ALGS_COUNT; i++) {
     kssl_header sign;
     kssl_operation req, resp;
-    if (opcode != algs[i] && opcode != 0) continue;
+    if (opcode != rsa_algs[i] && opcode != 0) continue;
     sign.version_maj = KSSL_VERSION_MAJ;
     sign.id = 0x1234567a;
     zero_operation(&req);
@@ -841,10 +859,10 @@ void kssl_op_rsa_sign(connection *c, RSA *private, int opcode)
     req.ip = ipv4;
     req.ip_len = 4;
     req.digest = malloc(KSSL_DIGEST_SIZE);
-    digest_public_modulus(private, req.digest);
+    digest_public_rsa(rsa_pubkey, req.digest);
     req.payload = (BYTE *)digests[i];
     req.payload_len = strlen(digests[i]);
-    req.opcode = algs[i];
+    req.opcode = rsa_algs[i];
 
     h = kssl(c->ssl, &sign, &req);
     test_assert(h->id == sign.id);
@@ -852,7 +870,7 @@ void kssl_op_rsa_sign(connection *c, RSA *private, int opcode)
     parse_message_payload(h->data, h->length, &resp);
     test_assert(resp.opcode == KSSL_OP_RESPONSE);
 
-    rc = RSA_verify(nids[i], (unsigned char *)digests[i], strlen(digests[i]), resp.payload, resp.payload_len, private);
+    rc = RSA_verify(nid[i], (unsigned char *)digests[i], strlen(digests[i]), resp.payload, resp.payload_len, rsa_pubkey);
     test_assert(rc == 1);
 
     free(h);
@@ -863,29 +881,15 @@ void kssl_op_rsa_sign(connection *c, RSA *private, int opcode)
 }
 
 // Sign but don't verify, used for performance testing
-void kssl_repeat_op_rsa_sign(connection *c, RSA *private, int repeat, int opcode)
+void kssl_repeat_op_rsa_sign(connection *c, RSA *rsa_pubkey, int repeat, int opcode)
 {
-  #define ALGS_COUNT 6
-  int algs[ALGS_COUNT] = {KSSL_OP_RSA_SIGN_MD5SHA1, KSSL_OP_RSA_SIGN_SHA1, KSSL_OP_RSA_SIGN_SHA224,
-                          KSSL_OP_RSA_SIGN_SHA256, KSSL_OP_RSA_SIGN_SHA384, KSSL_OP_RSA_SIGN_SHA512};
-
-  // These are totally bogus but they have the right lengths (and, anyway, who's to say these aren't real
-  // message digests?)
-
-  char* digests[ALGS_COUNT] = { "123456789012345678901234567890123456",                              // MD5SH1 is 36 bytes
-                                "12345678901234567890",                                              // SHA1 is 20 bytes
-                                "1234567890123456789012345678",                                      // SHA224 is 28 bytes
-                                "12345678901234567890123456789012",                                  // SHA256 is 32 bytes
-                                "123456789012345678901234567890123456789012345678",                  // SHA384 is 48 bytes
-                                "1234567890123456789012345678901212345678901234567890123456789012"}; // SHA512 is 64 bytes
-
   int i, j;
   kssl_header *h;
   for (i = 0; i < ALGS_COUNT; i++) {
     kssl_header sign;
     kssl_operation req, resp;
 
-    if (opcode != algs[i]) continue;
+    if (opcode != rsa_algs[i]) continue;
     sign.version_maj = KSSL_VERSION_MAJ;
     sign.id = 0x1234567a;
     zero_operation(&req);
@@ -896,10 +900,10 @@ void kssl_repeat_op_rsa_sign(connection *c, RSA *private, int repeat, int opcode
     req.ip = ipv4;
     req.ip_len = 4;
     req.digest = malloc(KSSL_DIGEST_SIZE);
-    digest_public_modulus(private, req.digest);
+    digest_public_rsa(rsa_pubkey, req.digest);
     req.payload = (BYTE *)digests[i];
     req.payload_len = strlen(digests[i]);
-    req.opcode = algs[i];
+    req.opcode = rsa_algs[i];
 
     for (j = 0; j < repeat; j++) {
       h = kssl(c->ssl, &sign, &req);
@@ -914,28 +918,14 @@ void kssl_repeat_op_rsa_sign(connection *c, RSA *private, int repeat, int opcode
   }
 }
 
-void kssl_pipeline_op_rsa_sign(connection *c, RSA *private, int repeat, int opcode)
+void kssl_pipeline_op_rsa_sign(connection *c, RSA *rsa_pubkey, int repeat, int opcode)
 {
-  #define ALGS_COUNT 6
-  int algs[ALGS_COUNT] = {KSSL_OP_RSA_SIGN_MD5SHA1, KSSL_OP_RSA_SIGN_SHA1, KSSL_OP_RSA_SIGN_SHA224,
-                          KSSL_OP_RSA_SIGN_SHA256, KSSL_OP_RSA_SIGN_SHA384, KSSL_OP_RSA_SIGN_SHA512};
-
-  // These are totally bogus but they have the right lengths (and, anyway, who's to say these aren't real
-  // message digests?)
-
-  char* digests[ALGS_COUNT] = { "123456789012345678901234567890123456",                              // MD5SH1 is 36 bytes
-                                "12345678901234567890",                                              // SHA1 is 20 bytes
-                                "1234567890123456789012345678",                                      // SHA224 is 28 bytes
-                                "12345678901234567890123456789012",                                  // SHA256 is 32 bytes
-                                "123456789012345678901234567890123456789012345678",                  // SHA384 is 48 bytes
-                                "1234567890123456789012345678901212345678901234567890123456789012"}; // SHA512 is 64 bytes
-
   int i;
   for (i = 0; i < ALGS_COUNT; i++) {
     kssl_header sign;
     kssl_operation req;
 
-    if (opcode != algs[i]) continue;
+    if (opcode != rsa_algs[i]) continue;
     sign.version_maj = KSSL_VERSION_MAJ;
     sign.id = 0x1234567a;
     zero_operation(&req);
@@ -946,20 +936,20 @@ void kssl_pipeline_op_rsa_sign(connection *c, RSA *private, int repeat, int opco
     req.ip = ipv4;
     req.ip_len = 4;
     req.digest = malloc(KSSL_DIGEST_SIZE);
-    digest_public_modulus(private, req.digest);
+    digest_public_rsa(rsa_pubkey, req.digest);
     req.payload = (BYTE *)digests[i];
     req.payload_len = strlen(digests[i]);
-    req.opcode = algs[i];
+    req.opcode = rsa_algs[i];
 
     kssl_pipeline(c->ssl, &sign, &req, repeat);
     free(req.digest);
   }
 }
 
-void kssl_op_rsa_decrypt_bad_data(connection *c, RSA *private)
+void kssl_op_rsa_decrypt_bad_data(connection *c, RSA *rsa_pubkey)
 {
   char *kryptos2 = "It was totally invisible, how's that possible?";
-  BYTE *payload = malloc(RSA_size(private));
+  BYTE *payload = malloc(RSA_size(rsa_pubkey));
   kssl_header decrypt;
   kssl_operation req, resp;
   int size;
@@ -973,17 +963,17 @@ void kssl_op_rsa_decrypt_bad_data(connection *c, RSA *private)
   req.is_payload_set = 1;
   req.is_digest_set = 1;
   req.payload = payload;
-  req.payload_len = RSA_size(private);
+  req.payload_len = RSA_size(rsa_pubkey);
   req.is_ip_set = 1;
   req.ip = ipv4;
   req.ip_len = 4;
   req.digest = malloc(KSSL_DIGEST_SIZE);
-  digest_public_modulus(private, req.digest);
+  digest_public_rsa(rsa_pubkey, req.digest);
   req.opcode = KSSL_OP_RSA_DECRYPT;
 
   size = RSA_public_encrypt(strlen(kryptos2), (unsigned char *)kryptos2,
                                 (unsigned char *)payload,
-                                private, RSA_PKCS1_PADDING);
+                                rsa_pubkey, RSA_PKCS1_PADDING);
   if (size == -1) {
     fatal_error("Failed to RSA encrypt");
   }
@@ -1050,10 +1040,10 @@ void ssl_disconnect(connection *c)
   free(c);
 }
 
-void kssl_op_rsa_decrypt_bad_digest(connection *c, RSA *private)
+void kssl_op_rsa_decrypt_bad_digest(connection *c, RSA *rsa_pubkey)
 {
   char *kryptos2 = "It was totally invisible, how's that possible?";
-  BYTE *payload = malloc(RSA_size(private));
+  BYTE *payload = malloc(RSA_size(rsa_pubkey));
   kssl_header decrypt;
   int size;
   kssl_header *h;
@@ -1067,14 +1057,14 @@ void kssl_op_rsa_decrypt_bad_digest(connection *c, RSA *private)
   req.is_payload_set = 1;
   req.is_digest_set = 1;
   req.digest = malloc(KSSL_DIGEST_SIZE);
-  digest_public_modulus(private, req.digest);
+  digest_public_rsa(rsa_pubkey, req.digest);
   req.opcode = KSSL_OP_RSA_DECRYPT;
   req.payload = payload;
-  req.payload_len = RSA_size(private);
+  req.payload_len = RSA_size(rsa_pubkey);
 
   size = RSA_public_encrypt(strlen(kryptos2), (unsigned char *)kryptos2,
                                 (unsigned char *)payload,
-                                private, RSA_PKCS1_PADDING);
+                                rsa_pubkey, RSA_PKCS1_PADDING);
   if (size == -1) {
     fatal_error("Failed to RSA encrypt");
   }
@@ -1094,7 +1084,7 @@ void kssl_op_rsa_decrypt_bad_digest(connection *c, RSA *private)
 
 typedef struct signing_data_ {
   SSL_CTX *ctx;
-  RSA *private;
+  RSA *rsa_pubkey;
   int port;
   int repeat;
   int alg;
@@ -1105,7 +1095,7 @@ void thread_repeat_rsa_sign(void *ptr)
   signing_data *data = (signing_data*)ptr;
 
   connection *c1 = ssl_connect(data->ctx, data->port);
-  kssl_repeat_op_rsa_sign(c1, data->private, data->repeat, data->alg);
+  kssl_repeat_op_rsa_sign(c1, data->rsa_pubkey, data->repeat, data->alg);
   ssl_disconnect(c1);
 }
 
@@ -1114,34 +1104,31 @@ void thread_pipeline_rsa_sign(void *ptr)
   signing_data *data = (signing_data*)ptr;
 
   connection *c1 = ssl_connect(data->ctx, data->port);
-  kssl_pipeline_op_rsa_sign(c1, data->private, data->repeat, data->alg);
+  kssl_pipeline_op_rsa_sign(c1, data->rsa_pubkey, data->repeat, data->alg);
   ssl_disconnect(c1);
 }
 
 int main(int argc, char *argv[])
 {
   int port = -1;
-  char *private_key = 0;
+  char *rsa_pubkey_path = 0;
   char *client_cert = 0;
   char *client_key = 0;
   char *ca_file = 0;
 
   const SSL_METHOD *method;
-  RSA *private;
+  RSA *rsa_pubkey;
   BIO *bio;
   SSL_CTX *ctx;
   connection *c0, *c1, *c2, *c3, *c;
   int i, j;
   int opt;
   struct timeval stop, start;
-  int algs[ALGS_COUNT] = {KSSL_OP_RSA_SIGN_MD5SHA1, KSSL_OP_RSA_SIGN_SHA1, KSSL_OP_RSA_SIGN_SHA224,
-                          KSSL_OP_RSA_SIGN_SHA256, KSSL_OP_RSA_SIGN_SHA384, KSSL_OP_RSA_SIGN_SHA512};
-  const char * cipher_list = "ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384";
+  const char * cipher_list = "ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-RSA-AES128-SHA256:AES128-GCM-SHA256:RC4:HIGH:!MD5:!aNULL:!EDH";
   const char * ec_curve_name = "prime256v1";
-
   const struct option long_options[] = {
     {"port",        required_argument, 0, 0},
-    {"private-key", required_argument, 0, 1},
+    {"rsa-pubkey",  required_argument, 0, 1},
     {"client-cert", required_argument, 0, 2},
     {"client-key",  required_argument, 0, 3},
     {"ca-file",     required_argument, 0, 4},
@@ -1164,8 +1151,8 @@ int main(int argc, char *argv[])
       break;
 
     case 1:
-      private_key = (char *)malloc(strlen(optarg)+1);
-      strcpy(private_key, optarg);
+      rsa_pubkey_path = (char *)malloc(strlen(optarg)+1);
+      strcpy(rsa_pubkey_path, optarg);
       break;
 
     case 2:
@@ -1205,8 +1192,8 @@ int main(int argc, char *argv[])
   if (port == -1) {
     fatal_error("The --port parameter must be specified with the connect port");
   }
-  if (!private_key) {
-    fatal_error("The --private-key parameter must be specified with the path to private key file which contains the public key to be used for encryption");
+  if (!rsa_pubkey_path) {
+    fatal_error("The --rsa-pubkey parameter must be specified with the path to the RSA public key file to be used for encryption and signature verification");
   }
   if (!client_cert) {
     fatal_error("The --client-cert parameter must be specified with a signed client certificate file name");
@@ -1225,16 +1212,12 @@ int main(int argc, char *argv[])
   method = TLSv1_2_client_method();
 
   bio = BIO_new(BIO_s_file());
-  BIO_read_filename(bio, private_key);
-  private = PEM_read_bio_RSAPrivateKey(bio, 0, 0, 0);
+  BIO_read_filename(bio, rsa_pubkey_path);
+  rsa_pubkey = PEM_read_bio_RSAPublicKey(bio, 0, 0, 0);
 
   BIO_free(bio);
-  if (!private) {
+  if (!rsa_pubkey) {
     ssl_error();
-  }
-
-  if (RSA_check_key(private) != 1) {
-    fatal_error("Private RSA key from file %s is not valid", private_key);
   }
 
   ctx = SSL_CTX_new(method);
@@ -1330,19 +1313,19 @@ int main(int argc, char *argv[])
   ssl_disconnect(c0);
 
   c0 = ssl_connect(ctx, port);
-  kssl_op_rsa_decrypt(c0, private);
+  kssl_op_rsa_decrypt(c0, rsa_pubkey);
   ssl_disconnect(c0);
 
    c0 = ssl_connect(ctx, port);
-  kssl_op_rsa_decrypt_bad_data(c0, private);
+  kssl_op_rsa_decrypt_bad_data(c0, rsa_pubkey);
   ssl_disconnect(c0);
 
   c0 = ssl_connect(ctx, port);
-  kssl_op_rsa_decrypt_bad_digest(c0, private);
+  kssl_op_rsa_decrypt_bad_digest(c0, rsa_pubkey);
   ssl_disconnect(c0);
 
   c0 = ssl_connect(ctx, port);
-  kssl_op_rsa_sign(c0, private, 0);
+  kssl_op_rsa_sign(c0, rsa_pubkey, 0);
   ssl_disconnect(c0);
 
   // Use a single connection to perform tests in sequence
@@ -1354,10 +1337,10 @@ int main(int argc, char *argv[])
   kssl_op_ping_no_payload(c);
   kssl_op_ping_payload(c);
   kssl_op_ping_bad_version(c);
-  kssl_op_rsa_decrypt(c, private);
-  kssl_op_rsa_decrypt_bad_data(c, private);
-  kssl_op_rsa_decrypt_bad_digest(c, private);
-  kssl_op_rsa_sign(c, private, 0);
+  kssl_op_rsa_decrypt(c, rsa_pubkey);
+  kssl_op_rsa_decrypt_bad_data(c, rsa_pubkey);
+  kssl_op_rsa_decrypt_bad_digest(c, rsa_pubkey);
+  kssl_op_rsa_sign(c, rsa_pubkey, 0);
   ssl_disconnect(c);
 
   // Make two connections and perform interleaved tests
@@ -1376,14 +1359,14 @@ int main(int argc, char *argv[])
   kssl_op_ping_payload(c2);
   kssl_op_ping_bad_version(c1);
   kssl_op_ping_bad_version(c2);
-  kssl_op_rsa_decrypt(c1, private);
-  kssl_op_rsa_decrypt(c2, private);
-  kssl_op_rsa_decrypt_bad_data(c1, private);
-  kssl_op_rsa_decrypt_bad_data(c2, private);
-  kssl_op_rsa_decrypt_bad_digest(c1, private);
-  kssl_op_rsa_decrypt_bad_digest(c2, private);
-  kssl_op_rsa_sign(c1, private, 0);
-  kssl_op_rsa_sign(c2, private, 0);
+  kssl_op_rsa_decrypt(c1, rsa_pubkey);
+  kssl_op_rsa_decrypt(c2, rsa_pubkey);
+  kssl_op_rsa_decrypt_bad_data(c1, rsa_pubkey);
+  kssl_op_rsa_decrypt_bad_data(c2, rsa_pubkey);
+  kssl_op_rsa_decrypt_bad_digest(c1, rsa_pubkey);
+  kssl_op_rsa_decrypt_bad_digest(c2, rsa_pubkey);
+  kssl_op_rsa_sign(c1, rsa_pubkey, 0);
+  kssl_op_rsa_sign(c2, rsa_pubkey, 0);
   ssl_disconnect(c2);
   ssl_disconnect(c1);
 
@@ -1405,16 +1388,16 @@ int main(int argc, char *argv[])
   kssl_op_ping_payload(c2);
   kssl_op_ping_bad_version(c1);
   kssl_op_ping_bad_version(c2);
-  kssl_op_rsa_decrypt(c1, private);
-  kssl_op_rsa_decrypt(c2, private);
+  kssl_op_rsa_decrypt(c1, rsa_pubkey);
+  kssl_op_rsa_decrypt(c2, rsa_pubkey);
   ssl_disconnect(c1);
   c1 = ssl_connect(ctx, port);
-  kssl_op_rsa_decrypt_bad_data(c1, private);
-  kssl_op_rsa_decrypt_bad_data(c2, private);
-  kssl_op_rsa_decrypt_bad_digest(c1, private);
-  kssl_op_rsa_decrypt_bad_digest(c2, private);
-  kssl_op_rsa_sign(c1, private, 0);
-  kssl_op_rsa_sign(c2, private, 0);
+  kssl_op_rsa_decrypt_bad_data(c1, rsa_pubkey);
+  kssl_op_rsa_decrypt_bad_data(c2, rsa_pubkey);
+  kssl_op_rsa_decrypt_bad_digest(c1, rsa_pubkey);
+  kssl_op_rsa_decrypt_bad_digest(c2, rsa_pubkey);
+  kssl_op_rsa_sign(c1, rsa_pubkey, 0);
+  kssl_op_rsa_sign(c2, rsa_pubkey, 0);
   ssl_disconnect(c2);
   ssl_disconnect(c1);
 
@@ -1430,9 +1413,9 @@ int main(int argc, char *argv[])
       c1 = ssl_connect(ctx, port);
       for (i = 0; i < ALGS_COUNT; i++) {
         gettimeofday(&start, NULL);
-        kssl_repeat_op_rsa_sign(c1, private, LOOP_COUNT, algs[i]);
+        kssl_repeat_op_rsa_sign(c1, rsa_pubkey, LOOP_COUNT, rsa_algs[i]);
         gettimeofday(&stop, NULL);
-        printf("\n %d sequential %s takes %ld ms\n", LOOP_COUNT, opstring(algs[i]),
+        printf("\n %d sequential %s takes %ld ms\n", LOOP_COUNT, opstring(rsa_algs[i]),
             (stop.tv_sec - start.tv_sec) * 1000 +
             (stop.tv_usec - start.tv_usec) / 1000);
       }
@@ -1441,10 +1424,10 @@ int main(int argc, char *argv[])
       for (i = 0; i < ALGS_COUNT; i++) {
         gettimeofday(&start, NULL);
         c1 = ssl_connect(ctx, port);
-        kssl_repeat_op_rsa_sign(c1, private, LOOP_COUNT, algs[i]);
+        kssl_repeat_op_rsa_sign(c1, rsa_pubkey, LOOP_COUNT, rsa_algs[i]);
         ssl_disconnect(c1);
         gettimeofday(&stop, NULL);
-        printf("\n %d sequential %s with one connection takes %ld ms\n", LOOP_COUNT, opstring(algs[i]),
+        printf("\n %d sequential %s with one connection takes %ld ms\n", LOOP_COUNT, opstring(rsa_algs[i]),
             (stop.tv_sec - start.tv_sec) * 1000 +
             (stop.tv_usec - start.tv_usec) / 1000);
       }
@@ -1453,11 +1436,11 @@ int main(int argc, char *argv[])
         gettimeofday(&start, NULL);
         for (j = 0; j < LOOP_COUNT/10; j++) {
           c1 = ssl_connect(ctx, port);
-          kssl_repeat_op_rsa_sign(c1, private, 10, algs[i]);
+          kssl_repeat_op_rsa_sign(c1, rsa_pubkey, 10, rsa_algs[i]);
           ssl_disconnect(c1);
         }
         gettimeofday(&stop, NULL);
-        printf("\n %d sequential %s with 10 requests per re-connection takes %ld ms\n", LOOP_COUNT, opstring(algs[i]),
+        printf("\n %d sequential %s with 10 requests per re-connection takes %ld ms\n", LOOP_COUNT, opstring(rsa_algs[i]),
             (stop.tv_sec - start.tv_sec) * 1000 +
             (stop.tv_usec - start.tv_usec) / 1000);
       }
@@ -1473,17 +1456,17 @@ int main(int argc, char *argv[])
         gettimeofday(&start, NULL);
         for (j = 0; j < 2; j++) {
           data[j].ctx = ctx;
-          data[j].private = private;
+          data[j].rsa_pubkey = rsa_pubkey;
           data[j].port = port;
           data[j].repeat = LOOP_COUNT/2;
-          data[j].alg = algs[i];
+          data[j].alg = rsa_algs[i];
           uv_thread_create(&thread[j], thread_repeat_rsa_sign, (void *)&data[j]);
         }
         for (j = 0; j < 2; j++) {
           uv_thread_join(&thread[j]);
         }
         gettimeofday(&stop, NULL);
-        printf("\n %d requests %s over 2 threads takes %ld ms\n", LOOP_COUNT, opstring(algs[i]),
+        printf("\n %d requests %s over 2 threads takes %ld ms\n", LOOP_COUNT, opstring(rsa_algs[i]),
           (stop.tv_sec - start.tv_sec) * 1000 +
           (stop.tv_usec - start.tv_usec) / 1000);
       }
@@ -1497,10 +1480,10 @@ int main(int argc, char *argv[])
       for (i = 0; i < ALGS_COUNT; i++) {
         gettimeofday(&start, NULL);
         c0 = ssl_connect(ctx, port);
-        kssl_pipeline_op_rsa_sign(c0, private, LOOP_COUNT, algs[i]);
+        kssl_pipeline_op_rsa_sign(c0, rsa_pubkey, LOOP_COUNT, rsa_algs[i]);
         ssl_disconnect(c0);
         gettimeofday(&stop, NULL);
-        printf("\n %d pipeline %s requests takes %ld ms\n", LOOP_COUNT, opstring(algs[i]),
+        printf("\n %d pipeline %s requests takes %ld ms\n", LOOP_COUNT, opstring(rsa_algs[i]),
             (stop.tv_sec - start.tv_sec) * 1000 +
             (stop.tv_usec - start.tv_usec) / 1000);
       }
@@ -1516,17 +1499,17 @@ int main(int argc, char *argv[])
         gettimeofday(&start, NULL);
         for (j = 0; j < 2; j++) {
           data[j].ctx = ctx;
-          data[j].private = private;
+          data[j].rsa_pubkey = rsa_pubkey;
           data[j].port = port;
           data[j].repeat = LOOP_COUNT/2;
-          data[j].alg = algs[i];
+          data[j].alg = rsa_algs[i];
           uv_thread_create(&thread[j], thread_pipeline_rsa_sign, (void *)&data[j]);
         }
         for (j = 0; j < 2; j++) {
           uv_thread_join(&thread[j]);
         }
         gettimeofday(&stop, NULL);
-        printf("\n %d pipeline requests %s over 2 threads takes %ld ms\n", LOOP_COUNT, opstring(algs[i]),
+        printf("\n %d pipeline requests %s over 2 threads takes %ld ms\n", LOOP_COUNT, opstring(rsa_algs[i]),
           (stop.tv_sec - start.tv_sec) * 1000 +
           (stop.tv_usec - start.tv_usec) / 1000);
       }
@@ -1546,10 +1529,10 @@ int main(int argc, char *argv[])
           gettimeofday(&start, NULL);
           for (j = 0; j < forks[k]; j++) {
             data[j].ctx = ctx;
-            data[j].private = private;
+            data[j].rsa_pubkey = rsa_pubkey;
             data[j].port = port;
             data[j].repeat = LOOP_COUNT / forks[k];
-            data[j].alg = algs[i];
+            data[j].alg = rsa_algs[i];
             pid[j] = fork();
             if (pid[j] == 0) {
               thread_repeat_rsa_sign((void *)&data[j]);
@@ -1561,7 +1544,7 @@ int main(int argc, char *argv[])
           }
           gettimeofday(&stop, NULL);
           printf("\n %d requests %s over %d forks takes %ld ms\n", LOOP_COUNT,
-              opstring(algs[i]), forks[k],
+              opstring(rsa_algs[i]), forks[k],
               (stop.tv_sec - start.tv_sec) * 1000 +
               (stop.tv_usec - start.tv_usec) / 1000);
         }

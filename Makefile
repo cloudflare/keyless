@@ -254,12 +254,12 @@ test: all
 	@$(MAKE) --no-print-directory run VALGRIND=$(VALGRIND) PORT=$(PORT)
 	@perl -e 'while (!-e "$(PID_FILE)") { sleep(1); }'
 	@sleep 1
-	@$(OBJ)testclient --port=$(PORT) --private-key=$(KEYS_DIR)/private.key --client-cert=$(CLIENT_CERT) --client-key=$(CLIENT_KEY) --ca-file=$(KEYSERVER_CACERT) $(DEBUG) --server=localhost $(TEST_PARAMS)
+	@$(OBJ)testclient --port=$(PORT) --rsa-pubkey=$(KEYS_DIR)/rsa.pubkey --client-cert=$(CLIENT_CERT) --client-key=$(CLIENT_KEY) --ca-file=$(KEYSERVER_CACERT) $(DEBUG) --server=localhost $(TEST_PARAMS)
 	@$(MAKE) --no-print-directory kill
 	@$(MAKE) --no-print-directory run-rsa VALGRIND=$(VALGRIND) PORT=$(PORT)
 	@perl -e 'while (!-e "$(PID_FILE)") { sleep(1); }'
 	@sleep 1
-	@$(OBJ)testclient --port=$(PORT) --private-key=$(KEYS_DIR)/private.key --client-cert=$(CLIENT_CERT) --client-key=$(CLIENT_KEY) --ca-file=$(KEYSERVER_CACERT) $(DEBUG) --server=localhost $(TEST_PARAMS)
+	@$(OBJ)testclient --port=$(PORT) --rsa-pubkey=$(KEYS_DIR)/rsa.pubkey --client-cert=$(CLIENT_CERT) --client-key=$(CLIENT_KEY) --ca-file=$(KEYSERVER_CACERT) $(DEBUG) --server=localhost $(TEST_PARAMS)
 	@$(MAKE) --no-print-directory kill
 ifeq ($(VALGRIND),1)
 	@echo valgrind log in $(VALGRIND_LOG)
