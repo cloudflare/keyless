@@ -22,7 +22,8 @@ kssl_error_code kssl_operate(kssl_header *header,
                              BYTE *payload,
                              pk_list privates,
                              BYTE **out_response,
-                             int *out_response_len) {
+                             int *out_response_len)
+{
   kssl_error_code err = KSSL_ERROR_NONE;
   BYTE *local_resp = NULL;
   int local_resp_len = 0;
@@ -164,7 +165,8 @@ exit:
 kssl_error_code kssl_error(DWORD id,
                            BYTE error,
                            BYTE **response,
-                           int *response_len) {
+                           int *response_len)
+{
   kssl_header e;
   int offset = 0;
   int size = KSSL_HEADER_SIZE + KSSL_OPCODE_ITEM_SIZE + KSSL_ERROR_ITEM_SIZE;
@@ -196,8 +198,8 @@ kssl_error_code kssl_error(DWORD id,
 
   e.version_maj = KSSL_VERSION_MAJ;
   e.version_min = KSSL_VERSION_MIN;
-  e.length  = size - KSSL_HEADER_SIZE;
-  e.id      = id;
+  e.length = size - KSSL_HEADER_SIZE;
+  e.id = id;
 
   flatten_header(&e, resp, &offset);
   flatten_item_byte(KSSL_TAG_OPCODE, KSSL_OP_ERROR, resp, &offset);

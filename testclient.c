@@ -119,7 +119,7 @@ int thread_setup(void)
   mutex_buf = malloc(CRYPTO_num_locks() * sizeof(MUTEX_TYPE));
   if (!mutex_buf)
     return 0;
-  for (i = 0;  i < CRYPTO_num_locks(  );  i++)
+  for (i = 0; i < CRYPTO_num_locks();  i++)
     MUTEX_SETUP(mutex_buf[i]);
   CRYPTO_set_id_callback(id_function);
   CRYPTO_set_locking_callback(locking_function);
@@ -133,7 +133,7 @@ int thread_cleanup(void)
     return 0;
   CRYPTO_set_id_callback(NULL);
   CRYPTO_set_locking_callback(NULL);
-  for (i = 0;  i < CRYPTO_num_locks(  );  i++)
+  for (i = 0; i < CRYPTO_num_locks();  i++)
     MUTEX_CLEANUP(mutex_buf[i]);
   free(mutex_buf);
   mutex_buf = NULL;
@@ -142,7 +142,7 @@ int thread_cleanup(void)
 
 // ssl_error: call when a fatal SSL error occurs. Exits the program
 // with return code 1.
-void ssl_error()
+void ssl_error(void)
 {
   ERR_print_errors_fp(stderr);
   exit(1);
@@ -284,7 +284,8 @@ static void dump_request(kssl_operation *request) {
 }
 
 // dump_payload: print out the payload from a KSSL operation in hex
-void dump_payload(int l, BYTE *p) {
+void dump_payload(int l, BYTE *p)
+{
   kssl_operation request;
 
   if (!debug) return;
@@ -303,7 +304,6 @@ void dump_payload(int l, BYTE *p) {
   parse_message_payload(p, l, &request);
 
   dump_request(&request);
-
 }
 
 // dump_header: print out a KSSL header
@@ -404,7 +404,8 @@ kssl_header *kssl(SSL *ssl, kssl_header *k, kssl_operation *r)
   return to_return;
 }
 
-void kssl_write(SSL *ssl, kssl_header *k, kssl_operation *r) {
+void kssl_write(SSL *ssl, kssl_header *k, kssl_operation *r)
+{
   BYTE *req;
   int req_len, n;
 
@@ -420,7 +421,8 @@ void kssl_write(SSL *ssl, kssl_header *k, kssl_operation *r) {
   free(req);
 }
 
-kssl_header* kssl_read(SSL *ssl, kssl_header *k, kssl_operation *r) {
+kssl_header* kssl_read(SSL *ssl, kssl_header *k, kssl_operation *r)
+{
   kssl_header h, *to_return;
   BYTE buf[KSSL_HEADER_SIZE];
   int n;
@@ -493,7 +495,8 @@ kssl_header* kssl_read(SSL *ssl, kssl_header *k, kssl_operation *r) {
 
 // verify response, only verify kssl header currently
 // TODO: verify different kssl payload 
-int verify_response(kssl_header* k, kssl_operation* r, kssl_header* resp_k) {
+int verify_response(kssl_header* k, kssl_operation* r, kssl_header* resp_k)
+{
     test_assert(resp_k->id == k->id);
     test_assert(resp_k->version_maj == KSSL_VERSION_MAJ);
     // TODO: add other verification logic here
@@ -501,7 +504,8 @@ int verify_response(kssl_header* k, kssl_operation* r, kssl_header* resp_k) {
 }
 
 // send and read pipeline requests and responses
-void kssl_pipeline(SSL *ssl, kssl_header *k, kssl_operation *r, int repeat) {
+void kssl_pipeline(SSL *ssl, kssl_header *k, kssl_operation *r, int repeat)
+{
     int i, cur_gap, max_gap = 300;
     int w_count = 0, r_count = 0;
     long int increment;
@@ -1102,7 +1106,8 @@ typedef struct signing_data_ {
   int alg;
 } signing_data;
 
-void thread_repeat_rsa_sign(void *ptr) {
+void thread_repeat_rsa_sign(void *ptr)
+{
   signing_data *data = (signing_data*)ptr;
 
   connection *c1 = ssl_connect(data->ctx, data->port);
@@ -1110,7 +1115,8 @@ void thread_repeat_rsa_sign(void *ptr) {
   ssl_disconnect(c1);
 }
 
-void thread_pipeline_rsa_sign(void *ptr) {
+void thread_pipeline_rsa_sign(void *ptr)
+{
   signing_data *data = (signing_data*)ptr;
 
   connection *c1 = ssl_connect(data->ctx, data->port);
