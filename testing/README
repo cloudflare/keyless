@@ -1,0 +1,4 @@
+Note: These CAs and certificates are used for unit testing only and should not be included in trusted CA bundles used in production.
+To deploy in production, you will need a trusted CloudFlare CA bundle and a key server authentication certificate signed by the CloudFlare Key Server CA.
+Please contact your CloudFlare account manager to submit a certificate signing request.
+If you wish to use a testclient in production, your account manager can also issue you a trusted testclient certificate signed by a personal trusted Keyless Testing CA.
