@@ -219,13 +219,15 @@ The following files are reference implementations of the APIs above.
     
 On Debian-based Linuxes:
 
-    sudo apt-get install gcc
-    sudo gem install fpm
+    sudo apt-get install gcc automake libtool
+    sudo apt-get install rubygems # only required for packages
+    sudo gem install fpm --no-ri --no-rdoc # only required for packages
 
 On Centos:
 
     sudo yum install gcc automake libtool
-    sudo gem install fpm
+    sudo yum install rpm-build rubybgems ruby-devel # only required for packages
+    sudo gem install fpm --no-ri --no-rdoc # only required for packages
 
 On OS X (homebrew):
 
