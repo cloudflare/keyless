@@ -41,7 +41,7 @@
 
 // ssl_error: call when a fatal SSL error occurs. Exits the program
 // with return code 1.
-void ssl_error()
+void ssl_error(void)
 {
   ERR_print_errors_fp(stderr);
   exit(1);
@@ -68,7 +68,7 @@ void log_ssl_error(SSL *ssl, int rc)
 }
 
 // log_err_error: log an OpenSSL error and clear the OpenSSL error buffer
-void log_err_error()
+void log_err_error(void)
 {
   const char *err = ERR_error_string(ERR_get_error(), 0);
   write_log(1, "SSL error: %s", err);
@@ -77,7 +77,7 @@ void log_err_error()
 
 // error_string: converts an error return code from libuv into
 // a string error message
-const char * error_string(int e) 
+const char *error_string(int e) 
 {
   // All the libuv specific error codes (see uv-errno.h) are less than or
   // equal to -3000. Other error codes are from the system.
@@ -99,7 +99,8 @@ SSL_CTX *g_ctx;
 // Load all the private keys found in the pk_dir. This only
 // looks for files that end with .key and the part before the .key is taken
 // to be the DNS name.
-static void load_private_keys(SSL_CTX *ctx) {
+static void load_private_keys(SSL_CTX *ctx)
+{
   char *pattern;
   int privates_count, i;
 #if PLATFORM_WINDOWS
@@ -139,7 +140,7 @@ static void load_private_keys(SSL_CTX *ctx) {
 
   hFind = FindFirstFile(pattern, &FindFileData);
   for (i = 0; i < privates_count; ++i) {
-    char* path = (char *)malloc(strlen(pk_dir) + 1 +
+    char *path = (char *)malloc(strlen(pk_dir) + 1 +
                                 strlen(FindFileData.cFileName) + 1);
     strcpy(path, pk_dir);
     strcat(path, "\\");
@@ -231,11 +232,12 @@ void sigpipe_cb(uv_signal_t *w, int signum)
 }
 
 // thread_stop_cb: called via async_* to stop a thread
-void thread_stop_cb(uv_async_t* handle) {
+void thread_stop_cb(uv_async_t *handle)
+{
   worker_data *worker = (worker_data *)handle->data;
 
-  uv_close((uv_handle_t*)&worker->server, NULL);
-  uv_close((uv_handle_t*)&worker->stopper, NULL);
+  uv_close((uv_handle_t *)&worker->server, NULL);
+  uv_close((uv_handle_t *)&worker->stopper, NULL);
 }
 
 typedef struct {
@@ -246,17 +248,19 @@ typedef struct {
 
 // ipc_client_close_cb: called when the client has finished reading the
 // server handle from the pipe and has called uv_close()
-void ipc_client_close_cb(uv_handle_t *handle) {
+void ipc_client_close_cb(uv_handle_t *handle)
+{
   ipc_client *client = (ipc_client *)handle->data;
   free(client);
 }
 
 // ipc_read2_cb: data (the TCP server handle) ready to read on the pipe.
 // Read the handle and close the pipe.
-void ipc_read2_cb(uv_stream_t* handle,
+void ipc_read2_cb(uv_stream_t *handle,
                   ssize_t nread,
-                  const uv_buf_t* buf) {
-  uv_pipe_t *pipe = (uv_pipe_t*)handle;
+                  const uv_buf_t *buf)
+{
+  uv_pipe_t *pipe = (uv_pipe_t *)handle;
   uv_loop_t *loop = pipe->loop;
   ipc_client *client = (ipc_client *)pipe->data;
 
@@ -282,14 +286,15 @@ void ipc_read2_cb(uv_stream_t* handle,
       write_log(1, "No handles despite ipc_read_cb");
   }
 
-  uv_close((uv_handle_t*)&client->pipe, NULL);
+  uv_close((uv_handle_t *)&client->pipe, NULL);
 }
 
 // ipc_connect_cb: call when a thread has made a connection to the IPC
 // server. Just reads the TCP server handle.
-void ipc_connect_cb(uv_connect_t* req, int status) {
+void ipc_connect_cb(uv_connect_t *req, int status)
+{
   ipc_client *client = (ipc_client *)req->data;
-  int rc = uv_read_start((uv_stream_t*)&client->pipe, allocate_cb,
+  int rc = uv_read_start((uv_stream_t *)&client->pipe, allocate_cb,
                           ipc_read2_cb);
   if (rc != 0) {
     write_log(1, "Failed to begin reading on pipe: %s",
@@ -305,7 +310,8 @@ void ipc_connect_cb(uv_connect_t* req, int status) {
 
 // get_handle: retrieves the handle of the TCP server. Returns 0 on
 // failure.
-int get_handle(uv_loop_t* loop, uv_tcp_t* server) {
+int get_handle(uv_loop_t *loop, uv_tcp_t *server)
+{
   ipc_client *client = (ipc_client *)malloc(sizeof(ipc_client));
   int rc;
 
@@ -330,9 +336,10 @@ int get_handle(uv_loop_t* loop, uv_tcp_t* server) {
 // thread_entry: starts a new thread and begins listening for
 // connections. Before listening it obtains the server handle from
 // the main thread.
-void thread_entry(void *data) {
+void thread_entry(void *data)
+{
   worker_data *worker = (worker_data *)data;
-  uv_loop_t* loop = uv_loop_new();
+  uv_loop_t *loop = uv_loop_new();
   int rc;
 
   // The stopper is used to terminate the thread gracefully. The
@@ -347,7 +354,7 @@ void thread_entry(void *data) {
     uv_loop_delete(loop);
     return;
   }
-  uv_unref((uv_handle_t*)&worker->stopper);
+  uv_unref((uv_handle_t *)&worker->stopper);
 
   // Wait for the main thread to be ready and obtain the
   // server handle
@@ -400,8 +407,8 @@ void cleanup(uv_loop_t *loop, SSL_CTX *ctx, pk_list privates)
 
 typedef struct {
   uv_pipe_t pipe;
-  uv_tcp_t  *server;
-  int       connects;
+  uv_tcp_t *server;
+  int connects;
 } ipc_server;
 
 typedef struct {
@@ -411,7 +418,8 @@ typedef struct {
 
 // ipc_close_cb: called when the uv_close in ipc_write_cb has
 // completed and frees memory allocated for the peer connection.
-void ipc_close_cb(uv_handle_t *handle) {
+void ipc_close_cb(uv_handle_t *handle)
+{
   ipc_peer *peer = (ipc_peer *)handle->data;
   free(peer);
 }
@@ -419,7 +427,8 @@ void ipc_close_cb(uv_handle_t *handle) {
 // ipc_write_cb: called when the uv_write2 (sending the handle)
 // completes. Just closes the connection to the peer (i.e. the
 // thread).
-void ipc_write_cb(uv_write_t *req, int status) {
+void ipc_write_cb(uv_write_t *req, int status)
+{
   ipc_peer *peer = (ipc_peer *)req->data;
   uv_close((uv_handle_t *)&peer->pipe, ipc_close_cb);
 }
@@ -427,7 +436,8 @@ void ipc_write_cb(uv_write_t *req, int status) {
 // ipc_connection_cb: called when a connection is made to the IPC
 // server. Connections come from worker threads requesting the listen
 // handle.
-void ipc_connection_cb(uv_stream_t *pipe, int status) {
+void ipc_connection_cb(uv_stream_t *pipe, int status)
+{
   ipc_server *server = (ipc_server *)pipe->data;
   ipc_peer *peer = (ipc_peer *)malloc(sizeof(ipc_peer));
   uv_loop_t *loop = pipe->loop;
@@ -437,20 +447,20 @@ void ipc_connection_cb(uv_stream_t *pipe, int status) {
   // Accept the connection on the pipe and immediately write the
   // server handle to it using uv_write2 to send a handle
 
-  rc = uv_pipe_init(loop, (uv_pipe_t*)&peer->pipe, 1);
+  rc = uv_pipe_init(loop, (uv_pipe_t *)&peer->pipe, 1);
   if (rc != 0) {
     write_log(1, "Failed to create client pipe: %s",
               error_string(rc));
   } else {
-    rc = uv_accept(pipe, (uv_stream_t*)&peer->pipe);
+    rc = uv_accept(pipe, (uv_stream_t *)&peer->pipe);
     if (rc != 0) {
       write_log(1, "Failed to accept pipe connection: %s",
                 error_string(rc));
     } else {
       peer->write_req.data = (void *)peer;
       peer->pipe.data = (void *)peer;
-      rc = uv_write2(&peer->write_req, (uv_stream_t*)&peer->pipe,
-                     &buf, 1, (uv_stream_t*)server->server,
+      rc = uv_write2(&peer->write_req, (uv_stream_t *)&peer->pipe,
+                     &buf, 1, (uv_stream_t *)server->server,
                      ipc_write_cb);
       if (rc != 0) {
         write_log(1, "Failed to write server handle to pipe: %s",
@@ -465,7 +475,7 @@ void ipc_connection_cb(uv_stream_t *pipe, int status) {
 
   server->connects -= 1;
   if (server->connects == 0) {
-    uv_close((uv_handle_t*)pipe, NULL);
+    uv_close((uv_handle_t *)pipe, NULL);
   }
 }
 
@@ -473,12 +483,14 @@ uv_mutex_t *locks;
 
 // thread_id_cb: used by OpenSSL to get the currently running thread's
 // ID
-unsigned long thread_id_cb(void) {
+unsigned long thread_id_cb(void)
+{
   return uv_thread_self();
 }
 
 // locking_cb: used by OpenSSL to lock its internal data
-void locking_cb(int mode, int type, const char *file, int line) {
+void locking_cb(int mode, int type, const char *file, int line)
+{
   if (mode & CRYPTO_LOCK) {
     uv_mutex_lock(&locks[type]);
   } else {
@@ -510,8 +522,9 @@ int main(int argc, char *argv[])
   char *server_cert = 0;
   char *server_key = 0;
   char *private_key_directory = 0;
-  char *default_cipher_list = "ECDHE-RSA-AES128-SHA256:AES128-GCM-SHA256:RC4:HIGH:!MD5:!aNULL:!EDH";
-  char *cipher_list = 0;
+  const char *cipher_list = "ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384";
+  const char *ec_curve_name = "prime256v1";
+
   char *ca_file = 0;
   char *pid_file = 0;
   int parsed;
@@ -546,21 +559,20 @@ int main(int argc, char *argv[])
     {"server-cert",           required_argument, 0, 1},
     {"server-key",            required_argument, 0, 2},
     {"private-key-directory", required_argument, 0, 3},
-    {"cipher-list",           required_argument, 0, 4},
-    {"ca-file",               required_argument, 0, 5},
-    {"silent",                no_argument,       0, 6},
-    {"verbose",               no_argument,       0, 7},
-    {"pid-file",              required_argument, 0, 8},
-    {"num-workers",           optional_argument, 0, 9},
-    {"help",                  no_argument,       0, 10},
-    {"ip",                    required_argument, 0, 11},
+    {"ca-file",               required_argument, 0, 4},
+    {"silent",                no_argument,       0, 5},
+    {"verbose",               no_argument,       0, 6},
+    {"pid-file",              required_argument, 0, 7},
+    {"num-workers",           optional_argument, 0, 8},
+    {"help",                  no_argument,       0, 9},
+    {"ip",                    required_argument, 0, 10},
 #if !PLATFORM_WINDOWS
-    {"user",                  required_argument, 0, 12},
-    {"daemon",                no_argument,       0, 13},
-    {"syslog",                no_argument,       0, 14},
-    {"version",               no_argument,       0, 15},
+    {"user",                  required_argument, 0, 11},
+    {"daemon",                no_argument,       0, 12},
+    {"syslog",                no_argument,       0, 13},
+    {"version",               no_argument,       0, 14},
 #endif
-    {"test",                  no_argument,       0, 16},
+    {"test",                  no_argument,       0, 15},
     {0,                       0,                 0, 0}
   };
 
@@ -602,37 +614,32 @@ int main(int argc, char *argv[])
       break;
 
     case 4:
-      cipher_list = (char *)malloc(strlen(optarg)+1);
-      strcpy(cipher_list, optarg);
-      break;
-
-    case 5:
       ca_file = (char *)malloc(strlen(optarg)+1);
       strcpy(ca_file, optarg);
       break;
 
-    case 6:
+    case 5:
       silent = 1;
       break;
 
-    case 7:
+    case 6:
       verbose = 1;
       break;
 
-    case 8:
+    case 7:
       pid_file = (char *)malloc(strlen(optarg)+1);
       strcpy(pid_file, optarg);
       break;
 
-    case 9:
+    case 8:
       num_workers = atoi(optarg);
       break;
 
-    case 10:
+    case 9:
       help = 1;
       break;
 
-    case 11:
+    case 10:
       if (inet_pton(AF_INET, optarg, &addr.sin_addr) != 1) {
         fatal_error("The --ip parameter must be a valid IPv4 address");
       }
@@ -643,7 +650,7 @@ int main(int argc, char *argv[])
       // The --user parameter can be in the form username:group or
       // username. The latter will be equivalent to username:username.
 
-    case 12:
+    case 11:
       if (geteuid() == 0) {
         usergroup = (char *)malloc(strlen(optarg)+1);
         strcpy(usergroup, optarg);
@@ -680,21 +687,21 @@ int main(int argc, char *argv[])
       }
       break;
 
-    case 13:
+    case 12:
       daemon = 1;
       break;
 
-    case 14:
+    case 13:
       use_syslog = 1;
       break;
 
 #endif
 
-    case 15:
+    case 14:
       fatal_error("keyless: %s", KSSL_VERSION);
       break;
 
-    case 16:
+    case 15:
       test_mode = 1;
       break;
     }
@@ -829,22 +836,30 @@ The following options are not available on Windows systems:\n\
     ssl_error();
   }
 
-  // Set a specific cipher list that comes from the command-line and then set
-  // the context to ask for a peer (i.e. client certificate on connection) and
-  // to refuse connections that do not have a client certificate. The client
+  // Set the context to ask for a peer (i.e. client certificate on connection)
+  // and to refuse connections that do not have a client certificate. The client
   // certificate must be signed by the CA in the --ca-file parameter.
-
-  if (cipher_list == 0) {
-    cipher_list = default_cipher_list;
-  }
 
   if (SSL_CTX_set_cipher_list(ctx, cipher_list) == 0) {
     SSL_CTX_free(ctx);
     fatal_error("Failed to set cipher list %s", cipher_list);
   }
 
-  if (cipher_list != default_cipher_list) {
-    free(cipher_list);
+  int nid = OBJ_sn2nid(ec_curve_name);
+  if (NID_undef == nid) {
+    SSL_CTX_free(ctx);
+    fatal_error("ECDSA curve not present");
+  }
+
+  EC_KEY *ecdh = EC_KEY_new_by_curve_name(nid);
+  if (NULL == ecdh) {
+    SSL_CTX_free(ctx);
+    fatal_error("ECDSA new curve error");
+  }
+
+  if(SSL_CTX_set_tmp_ecdh(ctx, ecdh) != 1) {
+    SSL_CTX_free(ctx);
+    fatal_error("Call to SSL_CTX_set_tmp_ecdh failed");
   }
 
   SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, 0);
@@ -962,7 +977,7 @@ The following options are not available on Windows systems:\n\
                   error_string(rc));
   }
   p->pipe.data = (void *)p;
-  rc = uv_listen((uv_stream_t*)&p->pipe, MAX_WORKERS,
+  rc = uv_listen((uv_stream_t *)&p->pipe, MAX_WORKERS,
                  ipc_connection_cb);
   if (rc != 0) {
     SSL_CTX_free(ctx);
@@ -977,7 +992,7 @@ The following options are not available on Windows systems:\n\
     uv_sem_post(&worker[i].semaphore);
   }
   uv_run(loop, UV_RUN_DEFAULT);
-  uv_close((uv_handle_t*)&tcp_server, NULL);
+  uv_close((uv_handle_t *)&tcp_server, NULL);
   uv_run(loop, UV_RUN_DEFAULT);
   for (i = 0; i < num_workers; i++) {
     uv_sem_wait(&worker[i].semaphore);
@@ -1029,7 +1044,7 @@ The following options are not available on Windows systems:\n\
 
   locks = (uv_mutex_t *)malloc(CRYPTO_num_locks() * sizeof(uv_mutex_t));
 
-  for ( i = 0; i < CRYPTO_num_locks(); i++) {
+  for (i = 0; i < CRYPTO_num_locks(); i++) {
     rc = uv_mutex_init(&locks[i]);
     if (rc != 0) {
       SSL_CTX_free(ctx);
