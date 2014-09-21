@@ -250,6 +250,7 @@ kssl_error_code flatten_operation(kssl_header *header,
   int local_req_len;
   BYTE *local_req;
   int offset = 0;
+  int padding_size = 0;
   if (header == NULL        ||
       operation == NULL     ||
       out_operation == NULL ||
@@ -276,7 +277,6 @@ kssl_error_code flatten_operation(kssl_header *header,
   // The operation will always be padded to KSSL_PAD_TO +
   // KSSL_ITEM_HEADER_SIZE bytes
 
-  int padding_size = 0;
   if (local_req_len < KSSL_PAD_TO) {
     padding_size = KSSL_PAD_TO - local_req_len;
   }
