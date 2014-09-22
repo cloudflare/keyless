@@ -515,7 +515,9 @@ void write_pid(char *pid_file, int pid, int write)
           ok = 0;
         }
       }
-      ok = (fclose(fp) == 0);
+      if (fclose(fp) != 0) {
+        ok = 0;
+      }
     } else {
       ok = 0;
     }
