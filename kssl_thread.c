@@ -123,12 +123,16 @@ void set_get_header_state(connection_state *state)
 int set_get_payload_state(connection_state *state, int size)
 {
   state->payload = (BYTE *)malloc(size);
+  if (state->payload == NULL) {
+    return 0;
+  }
+
   state->start = state->payload;
   state->current = state->start;
   state->need = size;
   state->state = CONNECTION_STATE_GET_PAYLOAD;
 
-  return (state->payload != NULL)?1:0;
+  return 1;
 }
 
 // free_read_state: free memory allocated in a connection_state for
