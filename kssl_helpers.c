@@ -491,7 +491,12 @@ void log_operation(kssl_header *header, kssl_operation *op) {
   // The \n at the end of the ctime return is chopped off here.
 
   time_t now = time(NULL); 
-  char *nowstring = ctime(&now);
+  char nowstring[32]; // ctime_r documentation says there must be
+                      // room here for 26 bytes.
+  ctime_r(&now, &nowstring[0]);
+
+  // Strip the trailing \n
+
   nowstring[strlen(nowstring)-1] = '\0';
 
   print_ip(op, ip_string);
@@ -503,9 +508,12 @@ void log_operation(kssl_header *header, kssl_operation *op) {
 
 // log_error: log an error of the operation
 void log_error(DWORD id, BYTE code) {
-  time_t result;
-  result = time(NULL);
+  time_t now = time(NULL); 
+  char nowstring[32]; // ctime_r documentation says there must be
+                      // room here for 26 bytes.
+  ctime_r(&now, &nowstring[0]);
+
   write_log(1, "id:%d, error:%s, time:%s",
-    id, errstring(code), ctime(&result));
+    id, errstring(code), nowstring);
 }
 
