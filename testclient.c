@@ -89,6 +89,8 @@ unsigned char ipv4[4] = {127, 0, 0, 1};
 #define MUTEX_UNLOCK(x)       uv_mutex_unlock(&(x))
 #define THREAD_ID             uv_thread_self()
 
+struct hostent *localhost;
+
 char *server = 0;
 
 int tests = 0;
@@ -1004,18 +1006,12 @@ void kssl_op_rsa_decrypt_bad_data(connection *c, RSA *private)
 connection *ssl_connect(SSL_CTX *ctx, int port)
 {
   struct sockaddr_in addr;
-  struct hostent *localhost;
   int rc;
   connection *c = (connection *)calloc(1, sizeof(connection));
 
   c->fd = socket(AF_INET, SOCK_STREAM, 0);
   if (c->fd == -1) {
     fatal_error("Can't create TCP socket");
-  }
-
-  localhost = gethostbyname(server);
-  if (!localhost) {
-    fatal_error("Could not look up address of localhost");
   }
 
   memset(&addr, 0, sizeof(struct sockaddr_in));
@@ -1217,6 +1213,11 @@ int main(int argc, char *argv[])
   }
   if (!server) {
     fatal_error("The --server must be specified");
+  }
+
+  localhost = gethostbyname(server);
+  if (!localhost) {
+    fatal_error("Could not look up address of localhost");
   }
 
   SSL_library_init();

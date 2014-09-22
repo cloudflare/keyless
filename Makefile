@@ -80,7 +80,7 @@ LIBUV_DIR := $(call marker,$(LIBUV_ROOT)/)
 .PHONY: libuv
 libuv: $(LIBUV_A)
 $(LIBUV_A): $(call marker,$(TMP)) $(LIBUV_DIR)
-	@cd $(LIBUV_ROOT) && ./autogen.sh && ./configure --enable-static && make
+	@cd $(LIBUV_ROOT) && ./autogen.sh && ./configure --enable-static && $(MAKE)
 
 $(LIBUV_DIR): $(call marker,$(TMP))
 	@rm -rf $(LIBUV_ROOT)
@@ -100,7 +100,7 @@ endif
 openssl: $(firstword $(OPENSSL_A))
 
 $(firstword $(OPENSSL_A)): $(OPENSSL_DIR)
-	@cd $(OPENSSL_ROOT) && ./$(OPENSSL_CONFIG) no-shared && make
+	@cd $(OPENSSL_ROOT) && ./$(OPENSSL_CONFIG) no-shared && $(MAKE)
 
 $(OPENSSL_DIR): $(call marker,$(TMP))
 	@rm -rf $(OPENSSL_ROOT)
