@@ -276,6 +276,9 @@ int flush_write(connection_state *state)
 
   while ((n = BIO_read(state->write_bio, &b[0], BUF_SIZE)) > 0) {
     uv_write_t *req = (uv_write_t *)malloc(sizeof(uv_write_t));
+    if (req == NULL) {
+      return 0;
+    }
     uv_buf_t buf = uv_buf_init(&b[0], n);
 
     int rc = uv_write(req, (uv_stream_t*)state->tcp, &buf, 1, wrote_cb);

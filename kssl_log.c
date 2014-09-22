@@ -43,11 +43,14 @@ void write_log(int e,                // If set this is an error message
 	  return;
   }
 
-
   // +1 for the terminating 0
   // +1 for the \n we append in non-syslog mode
 
   newfmt = (char *)malloc(strlen(fmt)+1+strlen(name)+1);
+  if (newfmt == NULL) {
+    return;
+  }
+
   strcpy(newfmt, name);
   strcat(newfmt, fmt);
 

@@ -115,6 +115,10 @@ static void load_private_keys(SSL_CTX *ctx)
   uv_rwlock_wrlock(pk_lock);
 
   pattern = (char *)malloc(strlen(pk_dir) + strlen(starkey) + 1);
+  if (pattern == NULL) {
+    SSL_CTX_free(ctx);
+    fatal_error("Memory allocatione error");
+  }
   strcpy(pattern, pk_dir);
   strcat(pattern, starkey);
 
