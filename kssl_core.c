@@ -149,9 +149,7 @@ exit:
         &local_resp_len);
   }
 
-  if (out_payload != NULL) {
-    free(out_payload);
-  }
+  free(out_payload);
 
   if (err == KSSL_ERROR_NONE) {
     *out_response = local_resp;

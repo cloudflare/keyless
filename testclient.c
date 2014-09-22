@@ -188,7 +188,7 @@ void ok(kssl_header *h)
     printf(" ok\n");
   }
   if (h != 0) {
-    if (h->data != NULL) free(h->data);
+    free(h->data);
     free(h);
   }
 }
@@ -537,9 +537,7 @@ void kssl_pipeline(SSL *ssl, kssl_header *k, kssl_operation *r, int repeat)
         for (i = 0; i < increment; i++) {
             to_return = kssl_read(ssl, k, r);
             verify_response(k, r, to_return);
-            if (to_return->data) {
-                free(to_return->data);
-            }
+            free(to_return->data);
             free(to_return);
             r_count += 1;
         }

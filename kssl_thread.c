@@ -135,9 +135,7 @@ int set_get_payload_state(connection_state *state, int size)
 // reads
 void free_read_state(connection_state *state)
 {
-  if (state->payload != 0) {
-    free(state->payload);
-  }
+  free(state->payload);
 
   state->start = 0;
   state->payload = 0;
@@ -179,9 +177,7 @@ void connection_terminate(uv_tcp_t *tcp)
   }
 
   while (state->qr != state->qw) {
-    if (state->q[state->qr].start != 0) {
-      free(state->q[state->qr].start);
-    }
+    free(state->q[state->qr].start);
 
     state->qr += 1;
     if (state->qr == QUEUE_LENGTH) {
@@ -267,9 +263,7 @@ void clear_read_queue(connection_state *state)
 // wrote_cb: called when a socket write has succeeded
 void wrote_cb(uv_write_t* req, int status)
 {
-  if (req) {
-    free(req);
-  }
+  free(req);
 }
 
 // flush_write: flushes data in the write BIO to the network
@@ -488,7 +482,7 @@ void read_cb(uv_stream_t *s, ssize_t nread, const uv_buf_t *buf)
   // Buffer was previously allocated by us in a call to
   // allocate_cb. libuv will not reuse so we must free.
 
-  if (buf && buf->base) {
+  if (buf) {
     free(buf->base);
   }
 }

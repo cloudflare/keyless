@@ -1097,9 +1097,7 @@ The following options are not available on Windows systems:\n\
   free(usergroup);
 #endif
 
-  if (pid_file) {
-    free(pid_file);
-  }
+  free(pid_file);
 
   exit(0);
 }
