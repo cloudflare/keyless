@@ -116,16 +116,19 @@ void set_get_header_state(connection_state *state)
   state->header.data = 0;
 }
 
-// set_get_payload_state: puts a connection_state in the state to receive
-// a message payload. Memory allocated can be freed by calling
-// free_read_state()
-void set_get_payload_state(connection_state *state, int size)
+// set_get_payload_state: puts a connection_state in the state to receive a
+// message payload. Memory allocated can be freed by calling
+// free_read_state().  If the memory allocation fails then returns 0,
+// otherwise returns 1 to indicate that the state is correctly set up.
+int set_get_payload_state(connection_state *state, int size)
 {
   state->payload = (BYTE *)malloc(size);
   state->start = state->payload;
   state->current = state->start;
   state->need = size;
   state->state = CONNECTION_STATE_GET_PAYLOAD;
+
+  return (state->payload != NULL)?1:0;
 }
 
 // free_read_state: free memory allocated in a connection_state for
@@ -400,7 +403,14 @@ int do_ssl(connection_state *state)
       // before processing the operation requested in the header
 
       if (state->header.length > 0) {
-        set_get_payload_state(state, state->header.length);
+        if (!set_get_payload_state(state, state->header.length)) {
+          write_log(1, "Memory allocation error");
+          write_error(state, state->header.id, KSSL_ERROR_INTERNAL);
+          clear_read_queue(state);
+          free_read_state(state);
+          set_get_header_state(state);
+          return 1;
+        }
         continue;
       }
     } if (state->state == CONNECTION_STATE_GET_PAYLOAD) {

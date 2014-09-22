@@ -503,13 +503,20 @@ void locking_cb(int mode, int type, const char *file, int line)
 void write_pid(char *pid_file, int pid, int write)
 {
   if (pid_file) {
-    FILE *fp = fopen(pid_file, write ? "w" : "a");
+    int ok = 1;
+    FILE *fp = fopen(pid_file, write?"w":"a");
     if (fp) {
       if (write) {
-        fprintf(fp, "%d\n", pid);
+        if (fprintf(fp, "%d\n", pid) < 0) {
+          ok = 0;
+        }
       }
       fclose(fp);
     } else {
+      ok = 0;
+    }
+
+    if (!ok) {
       fatal_error("Can't write to pid file %s", pid_file);
     }
   }
