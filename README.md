@@ -282,5 +282,6 @@ the keyless server works (at all!):
 
 # License
 
-See the LICENSE file for details
-
+See the LICENSE file for details. Note: the license for this project is not
+'open source' as described in the [Open Source
+Definition](http://opensource.org/osd).
