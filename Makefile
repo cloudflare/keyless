@@ -200,7 +200,7 @@ VALGRIND_LOG := $(TMP)valgrind.log
 VALGRIND_COMMAND := valgrind --leak-check=yes --log-file=$(VALGRIND_LOG) --show-reachable=yes --trace-children=yes #
 endif
 
-PORT := $(shell perl free-port.pl)
+PORT := 30498
 PID_FILE := $(TMP)$(NAME).pid
 SERVER_LOG := $(TMP)$(NAME).log
 
