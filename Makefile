@@ -80,7 +80,7 @@ LIBUV_DIR := $(call marker,$(LIBUV_ROOT)/)
 .PHONY: libuv
 libuv: $(LIBUV_A)
 $(LIBUV_A): $(call marker,$(TMP)) $(LIBUV_DIR)
-	@cd $(LIBUV_ROOT) && ./autogen.sh && ./configure --enable-static && $(MAKE)
+	@cd $(LIBUV_ROOT) && ./autogen.sh && ./configure --enable-static --disable-dtrace && $(MAKE)
 
 $(LIBUV_DIR): $(call marker,$(TMP))
 	@rm -rf $(LIBUV_ROOT)
