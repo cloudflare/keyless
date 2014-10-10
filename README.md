@@ -58,6 +58,12 @@ The following opcodes are supported in the opcode item:
     0x05 - operation: RSA sign SHA256
     0x06 - operation: RSA sign SHA384
     0x07 - operation: RSA sign SHA512
+    0x12 - operation: ECDSA sign MD5SHA1
+    0x13 - operation: ECDSA sign SHA1
+    0x14 - operation: ECDSA sign SHA224
+    0x15 - operation: ECDSA sign SHA256
+    0x16 - operation: ECDSA sign SHA384
+    0x17 - operation: ECDSA sign SHA512
 
 Responses contain a header with a matching ID and only two items:
 
@@ -165,8 +171,6 @@ This is the keyserver for Keyless SSL. It consists of a single binary file
   certificate and private key that are used when a connection is made to the
   server. These must be signed by an authority that the client side recognizes
   (e.g. the same CA as --ca-file).
-- `--cipher-list` An OpenSSL list of ciphers that the TLS server will accept
-  for connections. e.g. ECDHE-RSA-AES128-SHA256:RC4:HIGH:!MD5
 - `--private-key-directory` Path to a directory containing private keys which
   the keyserver provides decoding service against. The key files must end with
   ".key" and be PEM-encoded. There should be no trailing / on the path.
