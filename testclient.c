@@ -184,6 +184,24 @@ void digest_public_rsa(RSA *key, BYTE *digest)
   OPENSSL_free(hex);
 }
 
+// digest_public_ec: calculates the SHA256 digest of the
+// hexadecimal representation of the EC public key group and
+// point. digest must be initialized with at least 32 bytes of
+// space.
+void digest_public_ec(EC_KEY *ec_key, BYTE *digest) {
+  const EC_POINT *ec_pub_key = EC_KEY_get0_public_key(ec_key);
+  const EC_GROUP *group = EC_KEY_get0_group(ec_key);
+  char *hex = EC_POINT_point2hex(group, ec_pub_key, POINT_CONVERSION_COMPRESSED, NULL);
+  EVP_MD_CTX *ctx;
+
+  ctx = EVP_MD_CTX_create();
+  EVP_DigestInit_ex(ctx, EVP_sha256(), 0);
+  EVP_DigestUpdate(ctx, hex, strlen(hex));
+  EVP_DigestFinal_ex(ctx, digest, 0);
+  EVP_MD_CTX_destroy(ctx);
+  OPENSSL_free(hex);
+}
+
 // ok: indicate that some tests passed and free memory
 void ok(kssl_header *h)
 {
@@ -819,6 +837,16 @@ static int rsa_algs[ALGS_COUNT] = {
   KSSL_OP_RSA_SIGN_SHA512,
 };
 
+// ECDSA signing algorithm opcodes
+static int ecdsa_algs[ALGS_COUNT] = {
+  KSSL_OP_ECDSA_SIGN_MD5SHA1,
+  KSSL_OP_ECDSA_SIGN_SHA1,
+  KSSL_OP_ECDSA_SIGN_SHA224,
+  KSSL_OP_ECDSA_SIGN_SHA256,
+  KSSL_OP_ECDSA_SIGN_SHA384,
+  KSSL_OP_ECDSA_SIGN_SHA512,
+};
+
 // OpenSSL digest NIDs 
 static int nid[ALGS_COUNT] = {
   NID_md5_sha1,
@@ -880,6 +908,46 @@ void kssl_op_rsa_sign(connection *c, RSA *rsa_pubkey, int opcode)
   ok(0);
 }
 
+void kssl_op_ecdsa_sign(connection *c, EC_KEY *ecdsa_pubkey, int opcode)
+{
+  int i, rc;
+  kssl_header *h;
+  test("KSSL_OP_ECDSA_SIGN_* (%p)", c);
+  for (i = 0; i < ALGS_COUNT; i++) {
+    kssl_header sign;
+    kssl_operation req, resp;
+    if (opcode != ecdsa_algs[i] && opcode != 0) continue;
+    sign.version_maj = KSSL_VERSION_MAJ;
+    sign.id = 0x1234567a;
+    zero_operation(&req);
+    req.is_opcode_set = 1;
+    req.is_payload_set = 1;
+    req.is_digest_set = 1;
+    req.is_ip_set = 1;
+    req.ip = ipv4;
+    req.ip_len = 4;
+    req.digest = malloc(KSSL_DIGEST_SIZE);
+    digest_public_ec(ecdsa_pubkey, req.digest);
+    req.payload = (BYTE *)digests[i];
+    req.payload_len = strlen(digests[i]);
+    req.opcode = ecdsa_algs[i];
+
+    h = kssl(c->ssl, &sign, &req);
+    test_assert(h->id == sign.id);
+    test_assert(h->version_maj == KSSL_VERSION_MAJ);
+    parse_message_payload(h->data, h->length, &resp);
+    test_assert(resp.opcode == KSSL_OP_RESPONSE);
+
+    rc = ECDSA_verify(nid[i], (unsigned char *)digests[i], strlen(digests[i]), resp.payload, resp.payload_len, ecdsa_pubkey);
+    test_assert(rc == 1);
+
+    free(h);
+    free(req.digest);
+  }
+
+  ok(0);
+}
+
 // Sign but don't verify, used for performance testing
 void kssl_repeat_op_rsa_sign(connection *c, RSA *rsa_pubkey, int repeat, int opcode)
 {
@@ -918,6 +986,43 @@ void kssl_repeat_op_rsa_sign(connection *c, RSA *rsa_pubkey, int repeat, int opc
   }
 }
 
+void kssl_repeat_op_ecdsa_sign(connection *c, EC_KEY *ecdsa_pubkey, int repeat, int opcode)
+{
+  int i, j;
+  kssl_header *h;
+  for (i = 0; i < ALGS_COUNT; i++) {
+    kssl_header sign;
+    kssl_operation req, resp;
+
+    if (opcode != ecdsa_algs[i]) continue;
+    sign.version_maj = KSSL_VERSION_MAJ;
+    sign.id = 0x1234567a;
+    zero_operation(&req);
+    req.is_opcode_set = 1;
+    req.is_payload_set = 1;
+    req.is_digest_set = 1;
+    req.is_ip_set = 1;
+    req.ip = ipv4;
+    req.ip_len = 4;
+    req.digest = malloc(KSSL_DIGEST_SIZE);
+    digest_public_ec(ecdsa_pubkey, req.digest);
+    req.payload = (BYTE *)digests[i];
+    req.payload_len = strlen(digests[i]);
+    req.opcode = ecdsa_algs[i];
+
+    for (j = 0; j < repeat; j++) {
+      h = kssl(c->ssl, &sign, &req);
+      test_assert(h->id == sign.id);
+      test_assert(h->version_maj == KSSL_VERSION_MAJ);
+      parse_message_payload(h->data, h->length, &resp);
+      test_assert(resp.opcode == KSSL_OP_RESPONSE);
+      free(h);
+    }
+
+    free(req.digest);
+  }
+}
+
 void kssl_pipeline_op_rsa_sign(connection *c, RSA *rsa_pubkey, int repeat, int opcode)
 {
   int i;
@@ -940,6 +1045,34 @@ void kssl_pipeline_op_rsa_sign(connection *c, RSA *rsa_pubkey, int repeat, int o
     req.payload = (BYTE *)digests[i];
     req.payload_len = strlen(digests[i]);
     req.opcode = rsa_algs[i];
+
+    kssl_pipeline(c->ssl, &sign, &req, repeat);
+    free(req.digest);
+  }
+}
+
+void kssl_pipeline_op_ecdsa_sign(connection *c, EC_KEY *ecdsa_pubkey, int repeat, int opcode)
+{
+  int i;
+  for (i = 0; i < ALGS_COUNT; i++) {
+    kssl_header sign;
+    kssl_operation req;
+
+    if (opcode != ecdsa_algs[i]) continue;
+    sign.version_maj = KSSL_VERSION_MAJ;
+    sign.id = 0x1234567a;
+    zero_operation(&req);
+    req.is_opcode_set = 1;
+    req.is_payload_set = 1;
+    req.is_digest_set = 1;
+    req.is_ip_set = 1;
+    req.ip = ipv4;
+    req.ip_len = 4;
+    req.digest = malloc(KSSL_DIGEST_SIZE);
+    digest_public_ec(ecdsa_pubkey, req.digest);
+    req.payload = (BYTE *)digests[i];
+    req.payload_len = strlen(digests[i]);
+    req.opcode = ecdsa_algs[i];
 
     kssl_pipeline(c->ssl, &sign, &req, repeat);
     free(req.digest);
@@ -1082,29 +1215,55 @@ void kssl_op_rsa_decrypt_bad_digest(connection *c, RSA *rsa_pubkey)
   free(req.digest);
 }
 
-typedef struct signing_data_ {
+typedef struct signing_data_rsa {
   SSL_CTX *ctx;
   RSA *rsa_pubkey;
   int port;
   int repeat;
   int alg;
-} signing_data;
+} signing_data_rsa;
+
+typedef struct signing_data_ecdsa {
+  SSL_CTX *ctx;
+  EC_KEY *ecdsa_pubkey;
+  int port;
+  int repeat;
+  int alg;
+} signing_data_ecdsa;
 
 void thread_repeat_rsa_sign(void *ptr)
 {
-  signing_data *data = (signing_data*)ptr;
+  signing_data_rsa *data = (signing_data_rsa*)ptr;
 
   connection *c1 = ssl_connect(data->ctx, data->port);
   kssl_repeat_op_rsa_sign(c1, data->rsa_pubkey, data->repeat, data->alg);
   ssl_disconnect(c1);
 }
 
+void thread_repeat_ecdsa_sign(void *ptr)
+{
+  signing_data_ecdsa *data = (signing_data_ecdsa*)ptr;
+
+  connection *c1 = ssl_connect(data->ctx, data->port);
+  kssl_repeat_op_ecdsa_sign(c1, data->ecdsa_pubkey, data->repeat, data->alg);
+  ssl_disconnect(c1);
+}
+
 void thread_pipeline_rsa_sign(void *ptr)
 {
-  signing_data *data = (signing_data*)ptr;
+  signing_data_rsa *data = (signing_data_rsa*)ptr;
 
   connection *c1 = ssl_connect(data->ctx, data->port);
   kssl_pipeline_op_rsa_sign(c1, data->rsa_pubkey, data->repeat, data->alg);
+  ssl_disconnect(c1);
+}
+
+void thread_pipeline_ecdsa_sign(void *ptr)
+{
+  signing_data_ecdsa *data = (signing_data_ecdsa*)ptr;
+
+  connection *c1 = ssl_connect(data->ctx, data->port);
+  kssl_pipeline_op_ecdsa_sign(c1, data->ecdsa_pubkey, data->repeat, data->alg);
   ssl_disconnect(c1);
 }
 
@@ -1112,12 +1271,15 @@ int main(int argc, char *argv[])
 {
   int port = -1;
   char *rsa_pubkey_path = 0;
+  char *ecdsa_pubkey_path = 0;
   char *client_cert = 0;
   char *client_key = 0;
   char *ca_file = 0;
 
   const SSL_METHOD *method;
+  EVP_PKEY *evp_pubkey_tmp;
   RSA *rsa_pubkey;
+  EC_KEY *ecdsa_pubkey;
   BIO *bio;
   SSL_CTX *ctx;
   connection *c0, *c1, *c2, *c3, *c;
@@ -1129,13 +1291,14 @@ int main(int argc, char *argv[])
   const struct option long_options[] = {
     {"port",        required_argument, 0, 0},
     {"rsa-pubkey",  required_argument, 0, 1},
-    {"client-cert", required_argument, 0, 2},
-    {"client-key",  required_argument, 0, 3},
-    {"ca-file",     required_argument, 0, 4},
-    {"debug",       no_argument,       0, 5},
-    {"server",      required_argument, 0, 6},
-    {"short",       no_argument,       0, 7},
-    {"alive",       no_argument,       0, 8}
+    {"ec-pubkey",   required_argument, 0, 2},
+    {"client-cert", required_argument, 0, 3},
+    {"client-key",  required_argument, 0, 4},
+    {"ca-file",     required_argument, 0, 5},
+    {"debug",       no_argument,       0, 6},
+    {"server",      required_argument, 0, 7},
+    {"short",       no_argument,       0, 8},
+    {"alive",       no_argument,       0, 9},
   };
 
   optind = 1;
@@ -1156,34 +1319,39 @@ int main(int argc, char *argv[])
       break;
 
     case 2:
+      ecdsa_pubkey_path = (char *)malloc(strlen(optarg)+1);
+      strcpy(ecdsa_pubkey_path, optarg);
+      break;
+
+    case 3:
       client_cert = (char *)malloc(strlen(optarg)+1);
       strcpy(client_cert, optarg);
       break;
 
-    case 3:
+    case 4:
       client_key = (char *)malloc(strlen(optarg)+1);
       strcpy(client_key, optarg);
       break;
 
-    case 4:
+    case 5:
       ca_file = (char *)malloc(strlen(optarg)+1);
       strcpy(ca_file, optarg);
       break;
 
-    case 5:
+    case 6:
       debug = 1;
       break;
 
-    case 6:
+    case 7:
       server = (char *)malloc(strlen(optarg)+1);
       strcpy(server, optarg);
       break;
       
-    case 7:
+    case 8:
       health = 1;
       break;
       
-    case 8:
+    case 9:
       alive = 1;
       break;
     }
@@ -1193,7 +1361,12 @@ int main(int argc, char *argv[])
     fatal_error("The --port parameter must be specified with the connect port");
   }
   if (!rsa_pubkey_path) {
-    fatal_error("The --rsa-pubkey parameter must be specified with the path to the RSA public key file to be used for encryption and signature verification");
+    fatal_error("The --rsa-pubkey parameter must be specified with the path to "
+                "the RSA public key file to be used for RSA encryption and signature verification");
+  }
+  if (!ecdsa_pubkey_path) {
+    fatal_error("The --ec-pubkey parameter must be specified with the path to "
+                "the EC public key file to be used for ECDSA signature verification");
   }
   if (!client_cert) {
     fatal_error("The --client-cert parameter must be specified with a signed client certificate file name");
@@ -1213,10 +1386,29 @@ int main(int argc, char *argv[])
 
   bio = BIO_new(BIO_s_file());
   BIO_read_filename(bio, rsa_pubkey_path);
-  rsa_pubkey = PEM_read_bio_RSAPublicKey(bio, 0, 0, 0);
+  evp_pubkey_tmp = PEM_read_bio_PUBKEY(bio, 0, 0, 0);
+  if (!evp_pubkey_tmp) {
+    fatal_error("Error reading RSA pubkey");
+  }
+  rsa_pubkey = EVP_PKEY_get1_RSA(evp_pubkey_tmp);
+  if (!rsa_pubkey) {
+    fatal_error("Error reading RSA pubkey");
+  }
 
   BIO_free(bio);
   if (!rsa_pubkey) {
+    ssl_error();
+  }
+  bio = BIO_new(BIO_s_file());
+  BIO_read_filename(bio, ecdsa_pubkey_path);
+  evp_pubkey_tmp = PEM_read_bio_PUBKEY(bio, 0, 0, 0);
+  if (!evp_pubkey_tmp) {
+    fatal_error("Error reading EC pubkey");
+  }
+  ecdsa_pubkey = EVP_PKEY_get1_EC_KEY(evp_pubkey_tmp);
+
+  BIO_free(bio);
+  if (!ecdsa_pubkey) {
     ssl_error();
   }
 
@@ -1316,7 +1508,7 @@ int main(int argc, char *argv[])
   kssl_op_rsa_decrypt(c0, rsa_pubkey);
   ssl_disconnect(c0);
 
-   c0 = ssl_connect(ctx, port);
+  c0 = ssl_connect(ctx, port);
   kssl_op_rsa_decrypt_bad_data(c0, rsa_pubkey);
   ssl_disconnect(c0);
 
@@ -1326,6 +1518,10 @@ int main(int argc, char *argv[])
 
   c0 = ssl_connect(ctx, port);
   kssl_op_rsa_sign(c0, rsa_pubkey, 0);
+  ssl_disconnect(c0);
+
+  c0 = ssl_connect(ctx, port);
+  kssl_op_ecdsa_sign(c0, ecdsa_pubkey, 0);
   ssl_disconnect(c0);
 
   // Use a single connection to perform tests in sequence
@@ -1341,6 +1537,7 @@ int main(int argc, char *argv[])
   kssl_op_rsa_decrypt_bad_data(c, rsa_pubkey);
   kssl_op_rsa_decrypt_bad_digest(c, rsa_pubkey);
   kssl_op_rsa_sign(c, rsa_pubkey, 0);
+  kssl_op_ecdsa_sign(c, ecdsa_pubkey, 0);
   ssl_disconnect(c);
 
   // Make two connections and perform interleaved tests
@@ -1367,6 +1564,8 @@ int main(int argc, char *argv[])
   kssl_op_rsa_decrypt_bad_digest(c2, rsa_pubkey);
   kssl_op_rsa_sign(c1, rsa_pubkey, 0);
   kssl_op_rsa_sign(c2, rsa_pubkey, 0);
+  kssl_op_ecdsa_sign(c1, ecdsa_pubkey, 0);
+  kssl_op_ecdsa_sign(c2, ecdsa_pubkey, 0);
   ssl_disconnect(c2);
   ssl_disconnect(c1);
 
@@ -1398,6 +1597,8 @@ int main(int argc, char *argv[])
   kssl_op_rsa_decrypt_bad_digest(c2, rsa_pubkey);
   kssl_op_rsa_sign(c1, rsa_pubkey, 0);
   kssl_op_rsa_sign(c2, rsa_pubkey, 0);
+  kssl_op_ecdsa_sign(c1, ecdsa_pubkey, 0);
+  kssl_op_ecdsa_sign(c2, ecdsa_pubkey, 0);
   ssl_disconnect(c2);
   ssl_disconnect(c1);
 
@@ -1444,23 +1645,59 @@ int main(int argc, char *argv[])
             (stop.tv_sec - start.tv_sec) * 1000 +
             (stop.tv_usec - start.tv_usec) / 1000);
       }
+
+      c1 = ssl_connect(ctx, port);
+      for (i = 0; i < ALGS_COUNT; i++) {
+        gettimeofday(&start, NULL);
+        kssl_repeat_op_ecdsa_sign(c1, ecdsa_pubkey, LOOP_COUNT, ecdsa_algs[i]);
+        gettimeofday(&stop, NULL);
+        printf("\n %d sequential %s takes %ld ms\n", LOOP_COUNT, opstring(ecdsa_algs[i]),
+            (stop.tv_sec - start.tv_sec) * 1000 +
+            (stop.tv_usec - start.tv_usec) / 1000);
+      }
+      ssl_disconnect(c1);
+
+      for (i = 0; i < ALGS_COUNT; i++) {
+        gettimeofday(&start, NULL);
+        c1 = ssl_connect(ctx, port);
+        kssl_repeat_op_ecdsa_sign(c1, ecdsa_pubkey, LOOP_COUNT, ecdsa_algs[i]);
+        ssl_disconnect(c1);
+        gettimeofday(&stop, NULL);
+        printf("\n %d sequential %s with one connection takes %ld ms\n", LOOP_COUNT, opstring(ecdsa_algs[i]),
+            (stop.tv_sec - start.tv_sec) * 1000 +
+            (stop.tv_usec - start.tv_usec) / 1000);
+      }
+
+      for (i = 0; i < ALGS_COUNT; i++) {
+        gettimeofday(&start, NULL);
+        for (j = 0; j < LOOP_COUNT/10; j++) {
+          c1 = ssl_connect(ctx, port);
+          kssl_repeat_op_ecdsa_sign(c1, ecdsa_pubkey, 10, ecdsa_algs[i]);
+          ssl_disconnect(c1);
+        }
+        gettimeofday(&stop, NULL);
+        printf("\n %d sequential %s with 10 requests per re-connection takes %ld ms\n", LOOP_COUNT, opstring(ecdsa_algs[i]),
+            (stop.tv_sec - start.tv_sec) * 1000 +
+            (stop.tv_usec - start.tv_usec) / 1000);
+      }
     }
 
     // 2 threads
     {
       uv_thread_t thread[LOOP_COUNT];
-      signing_data data[LOOP_COUNT];
+      signing_data_rsa data_rsa[LOOP_COUNT];
+      signing_data_ecdsa data_ecdsa[LOOP_COUNT];
       thread_setup();
 
       for (i = 0; i < ALGS_COUNT; i++) {
         gettimeofday(&start, NULL);
         for (j = 0; j < 2; j++) {
-          data[j].ctx = ctx;
-          data[j].rsa_pubkey = rsa_pubkey;
-          data[j].port = port;
-          data[j].repeat = LOOP_COUNT/2;
-          data[j].alg = rsa_algs[i];
-          uv_thread_create(&thread[j], thread_repeat_rsa_sign, (void *)&data[j]);
+          data_rsa[j].ctx = ctx;
+          data_rsa[j].rsa_pubkey = rsa_pubkey;
+          data_rsa[j].port = port;
+          data_rsa[j].repeat = LOOP_COUNT/2;
+          data_rsa[j].alg = rsa_algs[i];
+          uv_thread_create(&thread[j], thread_repeat_rsa_sign, (void *)&data_rsa[j]);
         }
         for (j = 0; j < 2; j++) {
           uv_thread_join(&thread[j]);
@@ -1472,11 +1709,33 @@ int main(int argc, char *argv[])
       }
 
       thread_cleanup();
+
+      thread_setup();
+
+      for (i = 0; i < ALGS_COUNT; i++) {
+        gettimeofday(&start, NULL);
+        for (j = 0; j < 2; j++) {
+          data_ecdsa[j].ctx = ctx;
+          data_ecdsa[j].ecdsa_pubkey = ecdsa_pubkey;
+          data_ecdsa[j].port = port;
+          data_ecdsa[j].repeat = LOOP_COUNT/2;
+          data_ecdsa[j].alg = ecdsa_algs[i];
+          uv_thread_create(&thread[j], thread_repeat_ecdsa_sign, (void *)&data_ecdsa[j]);
+        }
+        for (j = 0; j < 2; j++) {
+          uv_thread_join(&thread[j]);
+        }
+        gettimeofday(&stop, NULL);
+        printf("\n %d requests %s over 2 threads takes %ld ms\n", LOOP_COUNT, opstring(ecdsa_algs[i]),
+          (stop.tv_sec - start.tv_sec) * 1000 +
+          (stop.tv_usec - start.tv_usec) / 1000);
+      }
+
+      thread_cleanup();
     }
 
     // pipeline request tests
     {
-
       for (i = 0; i < ALGS_COUNT; i++) {
         gettimeofday(&start, NULL);
         c0 = ssl_connect(ctx, port);
@@ -1487,29 +1746,64 @@ int main(int argc, char *argv[])
             (stop.tv_sec - start.tv_sec) * 1000 +
             (stop.tv_usec - start.tv_usec) / 1000);
       }
+
+      for (i = 0; i < ALGS_COUNT; i++) {
+        gettimeofday(&start, NULL);
+        c0 = ssl_connect(ctx, port);
+        kssl_pipeline_op_ecdsa_sign(c0, ecdsa_pubkey, LOOP_COUNT, ecdsa_algs[i]);
+        ssl_disconnect(c0);
+        gettimeofday(&stop, NULL);
+        printf("\n %d pipeline %s requests takes %ld ms\n", LOOP_COUNT, opstring(ecdsa_algs[i]),
+            (stop.tv_sec - start.tv_sec) * 1000 +
+            (stop.tv_usec - start.tv_usec) / 1000);
+      }
     }
 
     // 2 threads for pipeline request
     {
       uv_thread_t thread[LOOP_COUNT];
-      signing_data data[LOOP_COUNT];
+      signing_data_rsa data_rsa[LOOP_COUNT];
+      signing_data_ecdsa data_ecdsa[LOOP_COUNT];
       thread_setup();
 
       for (i = 0; i < ALGS_COUNT; i++) {
         gettimeofday(&start, NULL);
         for (j = 0; j < 2; j++) {
-          data[j].ctx = ctx;
-          data[j].rsa_pubkey = rsa_pubkey;
-          data[j].port = port;
-          data[j].repeat = LOOP_COUNT/2;
-          data[j].alg = rsa_algs[i];
-          uv_thread_create(&thread[j], thread_pipeline_rsa_sign, (void *)&data[j]);
+          data_rsa[j].ctx = ctx;
+          data_rsa[j].rsa_pubkey = rsa_pubkey;
+          data_rsa[j].port = port;
+          data_rsa[j].repeat = LOOP_COUNT/2;
+          data_rsa[j].alg = rsa_algs[i];
+          uv_thread_create(&thread[j], thread_pipeline_rsa_sign, (void *)&data_rsa[j]);
         }
         for (j = 0; j < 2; j++) {
           uv_thread_join(&thread[j]);
         }
         gettimeofday(&stop, NULL);
         printf("\n %d pipeline requests %s over 2 threads takes %ld ms\n", LOOP_COUNT, opstring(rsa_algs[i]),
+          (stop.tv_sec - start.tv_sec) * 1000 +
+          (stop.tv_usec - start.tv_usec) / 1000);
+      }
+
+      thread_cleanup();
+
+      thread_setup();
+
+      for (i = 0; i < ALGS_COUNT; i++) {
+        gettimeofday(&start, NULL);
+        for (j = 0; j < 2; j++) {
+          data_ecdsa[j].ctx = ctx;
+          data_ecdsa[j].ecdsa_pubkey = ecdsa_pubkey;
+          data_ecdsa[j].port = port;
+          data_ecdsa[j].repeat = LOOP_COUNT/2;
+          data_ecdsa[j].alg = ecdsa_algs[i];
+          uv_thread_create(&thread[j], thread_pipeline_ecdsa_sign, (void *)&data_ecdsa[j]);
+        }
+        for (j = 0; j < 2; j++) {
+          uv_thread_join(&thread[j]);
+        }
+        gettimeofday(&stop, NULL);
+        printf("\n %d pipeline requests %s over 2 threads takes %ld ms\n", LOOP_COUNT, opstring(ecdsa_algs[i]),
           (stop.tv_sec - start.tv_sec) * 1000 +
           (stop.tv_usec - start.tv_usec) / 1000);
       }
@@ -1523,19 +1817,46 @@ int main(int argc, char *argv[])
       int k;
       int forks[8] = {1, 2, 4, 8, 16, 32, 64, 128};
       pid_t pid[LOOP_COUNT];
-      signing_data data[LOOP_COUNT];
+      signing_data_rsa data_rsa[LOOP_COUNT];
+      signing_data_ecdsa data_ecdsa[LOOP_COUNT];
       for (k = 0; k < 8; k++) {
         for (i = 0; i < ALGS_COUNT; i++) {
           gettimeofday(&start, NULL);
           for (j = 0; j < forks[k]; j++) {
-            data[j].ctx = ctx;
-            data[j].rsa_pubkey = rsa_pubkey;
-            data[j].port = port;
-            data[j].repeat = LOOP_COUNT / forks[k];
-            data[j].alg = rsa_algs[i];
+            data_rsa[j].ctx = ctx;
+            data_rsa[j].rsa_pubkey = rsa_pubkey;
+            data_rsa[j].port = port;
+            data_rsa[j].repeat = LOOP_COUNT / forks[k];
+            data_rsa[j].alg = rsa_algs[i];
             pid[j] = fork();
             if (pid[j] == 0) {
-              thread_repeat_rsa_sign((void *)&data[j]);
+              thread_repeat_rsa_sign((void *)&data_rsa[j]);
+              exit(0);
+            }
+          }
+          for (j = 0; j < forks[k]; j++) {
+            waitpid(pid[j], NULL, 0);
+          }
+          gettimeofday(&stop, NULL);
+          printf("\n %d requests %s over %d forks takes %ld ms\n", LOOP_COUNT,
+              opstring(rsa_algs[i]), forks[k],
+              (stop.tv_sec - start.tv_sec) * 1000 +
+              (stop.tv_usec - start.tv_usec) / 1000);
+        }
+      }
+
+      for (k = 0; k < 8; k++) {
+        for (i = 0; i < ALGS_COUNT; i++) {
+          gettimeofday(&start, NULL);
+          for (j = 0; j < forks[k]; j++) {
+            data_ecdsa[j].ctx = ctx;
+            data_ecdsa[j].ecdsa_pubkey = ecdsa_pubkey;
+            data_ecdsa[j].port = port;
+            data_ecdsa[j].repeat = LOOP_COUNT / forks[k];
+            data_ecdsa[j].alg = ecdsa_algs[i];
+            pid[j] = fork();
+            if (pid[j] == 0) {
+              thread_repeat_ecdsa_sign((void *)&data_ecdsa[j]);
               exit(0);
             }
           }

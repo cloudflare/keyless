@@ -71,6 +71,8 @@ typedef struct {
 #define KSSL_OP_RSA_SIGN_SHA256      0x05
 #define KSSL_OP_RSA_SIGN_SHA384      0x06
 #define KSSL_OP_RSA_SIGN_SHA512      0x07
+
+// Sign data using ECDSA
 #define KSSL_OP_ECDSA_MASK           0x10
 #define KSSL_OP_ECDSA_SIGN_MD5SHA1   0x12
 #define KSSL_OP_ECDSA_SIGN_SHA1      0x13

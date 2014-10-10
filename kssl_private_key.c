@@ -68,10 +68,11 @@ static int opcode_to_digest_nid(BYTE opcode) {
 }
 
 // digest_public_key: calculates the SHA256 digest of the
-// hexadecimal representation of the EVP public key. For RSA key
-// this is based on public modulus. For EC key, this is based on
-// elliptic curve point. Digest must be initialized with at least
-// 32 bytes of space and is used to return the SHA256 digest.
+// hexadecimal representation of the EVP public key. For an RSA key
+// this is based on public modulus. For an EC key, this is based on
+// the key's elliptic curve group and public key point.
+// Digest must be initialized with at least 32 bytes of space and is used to
+// return the SHA256 digest.
 static int digest_public_key(EVP_PKEY *key, BYTE *digest) {
   char *hex;
   RSA *rsa;
