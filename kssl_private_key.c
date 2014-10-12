@@ -7,6 +7,8 @@
 #include <openssl/err.h>
 #include <openssl/conf.h>
 #include <openssl/engine.h>
+#include <openssl/evp.h>
+#include <openssl/ec.h>
 
 #include "kssl.h"
 #include "kssl_helpers.h"
@@ -17,10 +19,10 @@
 
 extern int silent;
 
-// private_key is an RSA key with its associate SHA256 digest
+// private_key is an EVP key with its associate SHA256 digest
 typedef struct {
   BYTE digest[KSSL_DIGEST_SIZE];   // SHA256 digest of key.
-  RSA *key;                        // RSA private key
+  EVP_PKEY *key;                        // EVP private key
 } private_key;
 
 // pk_list_ is an array of private_key structures
@@ -43,35 +45,76 @@ static void ssl_error() {
 static int opcode_to_digest_nid(BYTE opcode) {
   switch (opcode) {
     case KSSL_OP_RSA_SIGN_MD5SHA1:
+    case KSSL_OP_ECDSA_SIGN_MD5SHA1:
       return NID_md5_sha1;
     case KSSL_OP_RSA_SIGN_SHA1:
+    case KSSL_OP_ECDSA_SIGN_SHA1:
       return NID_sha1;
     case KSSL_OP_RSA_SIGN_SHA224:
+    case KSSL_OP_ECDSA_SIGN_SHA224:
       return NID_sha224;
     case KSSL_OP_RSA_SIGN_SHA256:
+    case KSSL_OP_ECDSA_SIGN_SHA256:
       return NID_sha256;
     case KSSL_OP_RSA_SIGN_SHA384:
+    case KSSL_OP_ECDSA_SIGN_SHA384:
       return NID_sha384;
     case KSSL_OP_RSA_SIGN_SHA512:
+    case KSSL_OP_ECDSA_SIGN_SHA512:
       return NID_sha512;
   }
 
   return 0;
 }
 
-// digest_public_modulus: calculates the SHA256 digest of the
-// hexadecimal representation of the public modulus of an RSA
-// key. digest must be initialized with at least 32 bytes of
-// space and is used to return the SHA256 digest.
-static void digest_public_modulus(RSA *key, BYTE *digest) {
+// digest_public_key: calculates the SHA256 digest of the
+// hexadecimal representation of the EVP public key. For an RSA key
+// this is based on public modulus. For an EC key, this is based on
+// the key's elliptic curve group and public key point.
+// Digest must be initialized with at least 32 bytes of space and is used to
+// return the SHA256 digest.
+static int digest_public_key(EVP_PKEY *key, BYTE *digest) {
   char *hex;
+  RSA *rsa;
+  EC_KEY *ec_key;
+  const EC_POINT *ec_pub_key;
+  const EC_GROUP *group;
+  switch (key->type) {
+    case EVP_PKEY_RSA:
+      rsa = EVP_PKEY_get1_RSA(key);
+      if (rsa == NULL) {
+        return 1;
+      }
+      hex = BN_bn2hex(rsa->n);
+      break;
+    case EVP_PKEY_EC:
+      ec_key = EVP_PKEY_get1_EC_KEY(key);
+      if (ec_key == NULL) {
+        return 1;
+      }
+      ec_pub_key = EC_KEY_get0_public_key(ec_key);
+      if (ec_pub_key == NULL) {
+        return 1;
+      }
+      group = EC_KEY_get0_group(ec_key);
+      if (group == NULL) {
+        return 1;
+      }
+      hex = EC_POINT_point2hex(group, ec_pub_key, POINT_CONVERSION_COMPRESSED, NULL);
+      break;
+    default:
+      return 1;
+  }
+  if (hex == NULL) {
+    return 1;
+  }
   EVP_MD_CTX *ctx = EVP_MD_CTX_create();
   EVP_DigestInit_ex(ctx, EVP_sha256(), 0);
-  hex = BN_bn2hex(key->n);
   EVP_DigestUpdate(ctx, hex, strlen(hex));
   EVP_DigestFinal_ex(ctx, digest, 0);
   EVP_MD_CTX_destroy(ctx);
   OPENSSL_free(hex);
+  return 0;
 }
 
 // constant_time_eq: compare to blocks of memory in constant time,
@@ -96,9 +139,10 @@ static int constant_time_eq(BYTE *x, BYTE *y, int len) {
 // occurs. Adds the private key to the list if successful.
 static kssl_error_code add_key_from_bio(BIO *key_bp,     // BIO Key value in PEM format
                                         pk_list list) {  // Array of private keys 
-  RSA *local_key;
+  EVP_PKEY *local_key;
+  RSA *rsa;
 
-  local_key = PEM_read_bio_RSAPrivateKey(key_bp, 0, 0, 0);
+  local_key = PEM_read_bio_PrivateKey(key_bp, 0, 0, 0);
   if (local_key == NULL) {
     ssl_error();
   }
@@ -108,12 +152,16 @@ static kssl_error_code add_key_from_bio(BIO *key_bp,     // BIO Key value in PEM
     return KSSL_ERROR_INTERNAL;
   }
 
-  if (RSA_check_key(local_key) != 1) {
+  if (local_key->type == EVP_PKEY_RSA) {
+    rsa = EVP_PKEY_get1_RSA(local_key);
+    if (rsa == NULL || RSA_check_key(rsa) != 1) {
+      return KSSL_ERROR_INTERNAL;
+    }
+  }
+  list->privates[list->current].key = local_key;
+  if(digest_public_key(local_key, list->privates[list->current].digest) != 0) {
     return KSSL_ERROR_INTERNAL;
   }
-
-  list->privates[list->current].key = local_key;
-  digest_public_modulus(local_key, list->privates[list->current].digest);
 
   list->current++;
 
@@ -154,7 +202,7 @@ void free_pk_list(pk_list list) {
       int j;
 
       for (j = 0; j < list->current; ++j) {
-        RSA_free(list->privates[j].key);
+        EVP_PKEY_free(list->privates[j].key);
       }
       free(list->privates);
     }
@@ -162,7 +210,7 @@ void free_pk_list(pk_list list) {
   }
 }
 
-// add_key_from_file: adds an RSA key from a file location, returns
+// add_key_from_file: adds a private key from a file location, returns
 // KSSL_ERROR_NONE if successful, or a KSSL_ERROR_* if a problem
 // occurs. Adds the private key to the list if successful.
 kssl_error_code add_key_from_file(const char *path, // Path to file containing key
@@ -184,7 +232,7 @@ kssl_error_code add_key_from_file(const char *path, // Path to file containing k
 
   err = add_key_from_bio(bp, list);
   if (err != KSSL_ERROR_NONE) {
-    write_log(1, "Private RSA key from file %s is not valid", path);
+    write_log(1, "Private key from file %s is not valid", path);
     BIO_free(bp);
 
     return KSSL_ERROR_INTERNAL;
@@ -195,7 +243,7 @@ kssl_error_code add_key_from_file(const char *path, // Path to file containing k
   return KSSL_ERROR_NONE;
 }
 
-// add_key_from_buffer: adds an RSA key from a pointer, returns
+// add_key_from_buffer: adds a private key from a pointer, returns
 // KSSL_ERROR_NONE if successful, or a KSSL_ERROR_* if a problem
 // occurs. Adds the private key to the list if successful.
 kssl_error_code add_key_from_buffer(const char *key, // Key value in PEM format
@@ -216,7 +264,7 @@ kssl_error_code add_key_from_buffer(const char *key, // Key value in PEM format
 
   err = add_key_from_bio(bp, list);
   if (err != KSSL_ERROR_NONE) {
-    write_log(1, "Private RSA key is not valid");
+    write_log(1, "Private key is not valid");
     BIO_free(bp);
     return KSSL_ERROR_INTERNAL;
   }
@@ -229,7 +277,7 @@ kssl_error_code add_key_from_buffer(const char *key, // Key value in PEM format
 // In this implementation key id is the index into the list of privates.
 // A negative return indicates an error.
 int find_private_key(pk_list list,   // Array of private keys from new_pk_list
-                     BYTE *digest) { // Digest of key searched for (see digest_public_modulus)
+                     BYTE *digest) { // Digest of key searched for (see digest_public_key)
   int j;
   int found = 0;
   for (j = 0; j < list->current; j++) {
@@ -255,33 +303,58 @@ kssl_error_code private_key_operation(pk_list list,         // Private key array
                                       BYTE *message,        // Bytes to perform operation on
                                       BYTE *out,            // Buffer into which operation output is written
                                       unsigned int *size) { // Size of returned data written here
-  int rc = KSSL_ERROR_NONE;
-
+  RSA *rsa;
+  EC_KEY *ec_key;
+  int digest_nid;
   // Currently, we only support decrypt or sign here
 
   if (opcode == KSSL_OP_RSA_DECRYPT) {
-    int s = RSA_private_decrypt(length, message, out, list->privates[key_id].key,
-                             RSA_PKCS1_PADDING);
+    rsa = EVP_PKEY_get1_RSA(list->privates[key_id].key);
+      if (rsa == NULL) {
+        ERR_clear_error();
+        return KSSL_ERROR_CRYPTO_FAILED;
+      }
+    int s = RSA_private_decrypt(length, message, out, rsa,  RSA_PKCS1_PADDING);
     if (s != -1) {
       *size = (unsigned int)s;
     } else {
-      rc = KSSL_ERROR_CRYPTO_FAILED;
       ERR_clear_error();
+      return KSSL_ERROR_CRYPTO_FAILED;
     }
   } else {
-    if (RSA_sign(opcode_to_digest_nid(opcode), message, length, out, size,
-                 list->privates[key_id].key) != 1) {
-      rc = KSSL_ERROR_CRYPTO_FAILED;
+    digest_nid = opcode_to_digest_nid(opcode);
+    //RSA signature
+    if (KSSL_OP_RSA_SIGN_MD5SHA1 <= opcode && opcode <= KSSL_OP_RSA_SIGN_SHA512) {
+      rsa = EVP_PKEY_get1_RSA(list->privates[key_id].key);
+      if (rsa == NULL) {
+        ERR_clear_error();
+        return KSSL_ERROR_CRYPTO_FAILED;
+      }
+      if (RSA_sign(digest_nid, message, length, out, size, rsa) != 1) {
+        ERR_clear_error();
+        return KSSL_ERROR_CRYPTO_FAILED;
+      }
+    } else if (KSSL_OP_ECDSA_SIGN_MD5SHA1 <= opcode && opcode <= KSSL_OP_ECDSA_SIGN_SHA512) {
+      //ECDSA signature
+      ec_key = EVP_PKEY_get1_EC_KEY(list->privates[key_id].key);
+      if (ec_key == NULL) {
+        ERR_clear_error();
+        return KSSL_ERROR_CRYPTO_FAILED;
+      }
+      if (ECDSA_sign(digest_nid, message, length, out, size, ec_key) != 1) {
+        ERR_clear_error();
+        return KSSL_ERROR_CRYPTO_FAILED;
+      }
+    } else {
+      return KSSL_ERROR_CRYPTO_FAILED;
     }
   }
 
-  return rc;
+  return KSSL_ERROR_NONE;
 }
 
 // key_size: returns the size of an RSA key in bytes
 int key_size(pk_list list,  // Array of private keys from new_pk_list
              int key_id) {  // ID of key from find_private_key
-  return RSA_size(list->privates[key_id].key);
+  return EVP_PKEY_size(list->privates[key_id].key);
 }
-
-

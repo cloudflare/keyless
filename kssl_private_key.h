@@ -21,14 +21,14 @@ pk_list new_pk_list(int count);
 // to new_pk_list
 void free_pk_list(pk_list list);
 
-// add_key_from_file: adds an RSA key from a file location, returns
+// add_key_from_file: adds an EVP key from a file location, returns
 // KSSL_ERROR_NONE if successful, or a KSSL_ERROR_* if a problem
 // occurs. Adds the private key to the list if successful.
 kssl_error_code add_key_from_file(
   const char *path,     // Path to file containing key
   pk_list     list);    // Array of private keys from new_pk_list
 
-// add_key_from_buffer: adds an RSA key from a pointer, returns
+// add_key_from_buffer: adds an EVP key from a pointer, returns
 // KSSL_ERROR_NONE if successful, or a KSSL_ERROR_* if a problem
 // occurs. Adds the private key to the list if successful.
 kssl_error_code add_key_from_buffer(
@@ -41,7 +41,7 @@ kssl_error_code add_key_from_buffer(
 // A negative return indicates an error.
 int find_private_key(
   pk_list     list,     // Array of private keys from new_pk_list
-  BYTE       *digest);  // Digest of key to search for (see digest_public_modulus)
+  BYTE       *digest);  // Digest of key to search for (see digest_public_key)
 
 // private_key_operation: perform a private key operation
 kssl_error_code private_key_operation(
@@ -53,7 +53,7 @@ kssl_error_code private_key_operation(
   BYTE       *out,      // Buffer into which operation output is written
   unsigned int *size);  // Size of returned data written here
 
-// key_size: returns the size of an RSA key in bytes
+// key_size: returns the size of an EVP key in bytes
 int key_size(
   pk_list     list,     // Array of private keys from new_pk_list
   int         key_id);  // ID of key from find_private_key
