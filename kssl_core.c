@@ -74,6 +74,7 @@ kssl_error_code kssl_operate(kssl_header *header,
 
     // Decrypt or sign the payload using the private key
     case KSSL_OP_RSA_DECRYPT:
+    case KSSL_OP_RSA_DECRYPT_RAW:
     case KSSL_OP_RSA_SIGN_MD5SHA1:
     case KSSL_OP_RSA_SIGN_SHA1:
     case KSSL_OP_RSA_SIGN_SHA224:

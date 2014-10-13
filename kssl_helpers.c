@@ -424,6 +424,8 @@ const char *opstring(BYTE op) {
     return "KSSL_OP_PONG";
   case KSSL_OP_RSA_DECRYPT:
     return "KSSL_OP_RSA_DECRYPT";
+  case KSSL_OP_RSA_DECRYPT_RAW:
+    return "KSSL_OP_RSA_DECRYPT_RAW";
   case KSSL_OP_RESPONSE:
     return "KSSL_OP_RESPONSE";
   case KSSL_OP_RSA_SIGN_MD5SHA1:

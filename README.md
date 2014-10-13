@@ -58,6 +58,7 @@ The following opcodes are supported in the opcode item:
     0x05 - operation: RSA sign SHA256
     0x06 - operation: RSA sign SHA384
     0x07 - operation: RSA sign SHA512
+    0x08 - operation: RSA raw decrypt payload
     0x12 - operation: ECDSA sign MD5SHA1
     0x13 - operation: ECDSA sign SHA1
     0x14 - operation: ECDSA sign SHA224
