@@ -1,3 +1,50 @@
+R1.6.0-20141016-0738
+- 2014-06-26 added dockerfiles for centOS and debian
+- 2014-06-26 added rpm-build to centos image
+- 2014-06-29 Update readme with new build instructions
+- 2014-06-29 KEY-23 - Tighten security on /etc/keyless/keys
+- 2014-07-02 replaced openssl url with mirror, debian docker container has issues downloading from openssl.org
+- 2014-09-10 Add an explanatory comment about why we loop around inside do_ssl
+- 2014-09-09 Updated authoritative cipher_list and added ECDSA curve (NIST P-256). Removed --cipher-list command line argument.
+- 2014-09-10 New Keyless and Keyserver CAs and consolidation of testing directory structure
+- 2014-09-10 Updated tests to run againt servers with ECDSA and RSA certificates (with ECDSA clients)
+- 2014-09-10 Print errno when the TLS handshake fails in the testclient
+- 2014-09-11 Fixes for Windows compilation including --version segfault
+- 2014-09-12 Warning not to use testing CAs in production and explanation of server certificate signing
+- 2014-09-19 Merge pull request #72 from cloudflare/cipher-suites
+- 2014-09-19 Merge pull request #68 from cloudflare/openssl-mirror
+- 2014-09-19 Merge pull request #67 from cloudflare/dane
+- 2014-09-19 Merge pull request #66 from cloudflare/dockerfiles
+- 2014-09-19 Added IPv6 code into free-port.pl
+- 2014-09-19 Attempt at making the code style more consistent.
+- 2014-09-19 Merge pull request #74 from nitrix/fixMinorStyling
+- 2014-09-19 Added documentation to code about -6 flag
+- 2014-09-19 Update included openssl version
+- 2014-09-20 Merge pull request #73 from mahtin/patch-1
+- 2014-09-20 Merged windows branch and master
+- 2014-09-21 Merge pull request #75 from cloudflare/windows
+- 2014-09-22 Address issue #76 - check error return codes
+- 2014-09-22 Address issue #77 - Remove unnecessary null pointer checks on free()
+- 2014-09-22 Address issue #81 - Unsafe threaded use of ctime()
+- 2014-09-22 Address issue #81 - Data race around gethostbyname in test code
+- 2014-09-22 Address issue #76 - More mallocs() that were assumed to work
+- 2014-09-22 Address issue #76 - more return parameter checking
+- 2014-09-22 Address issue #76 - Error in checking error on fclose
+- 2014-09-23 Address issue #80 - Add note about license not being 'open source'
+- 2014-09-25 bugfix: disabled dtrace in the libuv build because it caused issues when recent versions of systemtap is installed.
+- 2014-09-26 Merge pull request #84 from agentzh/no-dtrace
+- 2014-09-26 Make -6 completely optional by using Perl require instead of use.
+- 2014-09-26 Remove dependence on free-port.pl
+- 2014-09-16 Generalized kssl_private_key to use EVP_keys, added support for EC keys.
+- 2014-09-18 Cleanup testclient RSA tests
+- 2014-10-10 Tests for ECDSA signing
+- 2014-10-10 Update opcode documentation
+- 2014-10-12 Merge pull request #87 from cloudflare/ec-keys
+- 2014-10-13 Update bundled Keyless CA certificate in packages
+- 2014-10-13 Key-44 Raw RSA Decrypt operation
+- 2014-10-16 Merge pull request #88 from cloudflare/raw-rsa
+
+
 R1.5.0-20140909-1415
 - 2014-06-10 Update keyless.default
 - 2014-06-12 Merge branch 'master' of github.com:cloudflare/keyless
