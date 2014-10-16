@@ -306,15 +306,18 @@ kssl_error_code private_key_operation(pk_list list,         // Private key array
   RSA *rsa;
   EC_KEY *ec_key;
   int digest_nid;
+  int padding;
+  int s;
   // Currently, we only support decrypt or sign here
 
-  if (opcode == KSSL_OP_RSA_DECRYPT) {
+  if (opcode == KSSL_OP_RSA_DECRYPT || opcode == KSSL_OP_RSA_DECRYPT_RAW) {
     rsa = EVP_PKEY_get1_RSA(list->privates[key_id].key);
       if (rsa == NULL) {
         ERR_clear_error();
         return KSSL_ERROR_CRYPTO_FAILED;
       }
-    int s = RSA_private_decrypt(length, message, out, rsa,  RSA_PKCS1_PADDING);
+    padding = (opcode == KSSL_OP_RSA_DECRYPT_RAW ? RSA_NO_PADDING : RSA_PKCS1_PADDING);
+    s = RSA_private_decrypt(length, message, out, rsa, padding);
     if (s != -1) {
       *size = (unsigned int)s;
     } else {

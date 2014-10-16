@@ -825,6 +825,61 @@ void kssl_op_rsa_decrypt(connection *c, RSA *rsa_pubkey)
   free(req.digest);
 }
 
+void kssl_op_rsa_decrypt_raw(connection *c, RSA *rsa_pubkey)
+{
+  static int count = 0;
+  char kryptos2[255];
+  char unpadded_resp[255];
+  int unpadded_len;
+  kssl_header decrypt;
+  kssl_operation req, resp;
+  kssl_header *h;
+  int size;
+  test("KSSL_OP_RSA_DECRYPT_RAW (%p)", c);
+  decrypt.version_maj = KSSL_VERSION_MAJ;
+  decrypt.id = 0x1234567a;
+  zero_operation(&req);
+  req.is_opcode_set = 1;
+  req.is_payload_set = 1;
+  req.is_digest_set = 1;
+  req.is_ip_set = 1;
+  req.ip = ipv6;
+  req.ip_len = 16;
+  req.payload = malloc(RSA_size(rsa_pubkey));
+  req.payload_len = RSA_size(rsa_pubkey);
+  req.digest = malloc(KSSL_DIGEST_SIZE);
+  digest_public_rsa(rsa_pubkey, req.digest);
+  req.opcode = KSSL_OP_RSA_DECRYPT_RAW;
+  sprintf(kryptos2, "%02x It was totally invisible, how's that possible?", count);
+  count += 1;
+
+  size = RSA_public_encrypt(strlen(kryptos2), (unsigned char *)kryptos2,
+                                (unsigned char *)req.payload,
+                                rsa_pubkey, RSA_PKCS1_PADDING);
+
+  if (size == -1) {
+    fatal_error("Failed to RSA encrypt");
+  }
+
+  h = kssl(c->ssl, &decrypt, &req);
+  test_assert(h->id == decrypt.id);
+  test_assert(h->version_maj == KSSL_VERSION_MAJ);
+  parse_message_payload(h->data, h->length, &resp);
+  test_assert(resp.opcode == KSSL_OP_RESPONSE);
+  test_assert(resp.payload_len == RSA_size(rsa_pubkey));
+  test_assert(*(resp.payload++) == 0);
+  unpadded_len = RSA_padding_check_PKCS1_type_2((unsigned char *)unpadded_resp,
+                                                sizeof(unpadded_resp),
+                                                resp.payload,
+                                                resp.payload_len-1,
+                                                RSA_size(rsa_pubkey));
+  test_assert(unpadded_len == (int)strlen(kryptos2));
+  test_assert(strncmp(unpadded_resp, kryptos2, strlen(kryptos2)) == 0);
+  ok(h);
+  free(req.payload);
+  free(req.digest);
+}
+
 #define ALGS_COUNT 6
 
 // RSA signing algorithm opcodes
@@ -1124,6 +1179,43 @@ void kssl_op_rsa_decrypt_bad_data(connection *c, RSA *rsa_pubkey)
   free(req.digest);
 }
 
+void kssl_op_rsa_decrypt_raw_bad_data(connection *c, RSA *rsa_pubkey)
+{
+  kssl_header decrypt;
+  kssl_operation req, resp;
+  int size = RSA_size(rsa_pubkey) + 1;
+  BYTE *payload = malloc(size);
+  kssl_header *h;
+
+  test("KSSL_OP_RSA_DECRYPT_RAW with bad data (%p)", c);
+  decrypt.version_maj = KSSL_VERSION_MAJ;
+  decrypt.id = 0x1234567a;
+  zero_operation(&req);
+  req.is_opcode_set = 1;
+  req.is_payload_set = 1;
+  req.is_digest_set = 1;
+  req.payload = payload;
+  req.payload_len = size;
+  req.is_ip_set = 1;
+  req.ip = ipv4;
+  req.ip_len = 4;
+  req.digest = malloc(KSSL_DIGEST_SIZE);
+  digest_public_rsa(rsa_pubkey, req.digest);
+  req.opcode = KSSL_OP_RSA_DECRYPT_RAW;
+  memset(payload, 0, size);
+
+  h = kssl(c->ssl, &decrypt, &req);
+  test_assert(h->id == decrypt.id);
+  test_assert(h->version_maj == KSSL_VERSION_MAJ);
+  parse_message_payload(h->data, h->length, &resp);
+  test_assert(resp.opcode == KSSL_OP_ERROR);
+  test_assert(resp.payload_len == 1);
+  test_assert(resp.payload[0] == KSSL_ERROR_CRYPTO_FAILED);
+  ok(h);
+  free(req.payload);
+  free(req.digest);
+}
+
 // ssl_connect: establish a TLS connection to the keyserver on
 // the passed in port number
 connection *ssl_connect(SSL_CTX *ctx, int port)
@@ -1192,6 +1284,48 @@ void kssl_op_rsa_decrypt_bad_digest(connection *c, RSA *rsa_pubkey)
   req.digest = malloc(KSSL_DIGEST_SIZE);
   digest_public_rsa(rsa_pubkey, req.digest);
   req.opcode = KSSL_OP_RSA_DECRYPT;
+  req.payload = payload;
+  req.payload_len = RSA_size(rsa_pubkey);
+
+  size = RSA_public_encrypt(strlen(kryptos2), (unsigned char *)kryptos2,
+                                (unsigned char *)payload,
+                                rsa_pubkey, RSA_PKCS1_PADDING);
+  if (size == -1) {
+    fatal_error("Failed to RSA encrypt");
+  }
+
+  req.digest[0] ^= 0xff;
+  h = kssl(c->ssl, &decrypt, &req);
+  test_assert(h->id == decrypt.id);
+  test_assert(h->version_maj == KSSL_VERSION_MAJ);
+  parse_message_payload(h->data, h->length, &resp);
+  test_assert(resp.opcode == KSSL_OP_ERROR);
+  test_assert(resp.payload_len == 1);
+  test_assert(resp.payload[0] == KSSL_ERROR_KEY_NOT_FOUND);
+  ok(h);
+  free(req.payload);
+  free(req.digest);
+}
+
+void kssl_op_rsa_decrypt_raw_bad_digest(connection *c, RSA *rsa_pubkey)
+{
+  char *kryptos2 = "It was totally invisible, how's that possible?";
+  BYTE *payload = malloc(RSA_size(rsa_pubkey));
+  kssl_header decrypt;
+  int size;
+  kssl_header *h;
+  kssl_operation req, resp;
+
+  test("KSSL_OP_RSA_DECRYPT_RAW with bad digest (%p)", c);
+  decrypt.version_maj = KSSL_VERSION_MAJ;
+  decrypt.id = 0x1234567a;
+  zero_operation(&req);
+  req.is_opcode_set = 1;
+  req.is_payload_set = 1;
+  req.is_digest_set = 1;
+  req.digest = malloc(KSSL_DIGEST_SIZE);
+  digest_public_rsa(rsa_pubkey, req.digest);
+  req.opcode = KSSL_OP_RSA_DECRYPT_RAW;
   req.payload = payload;
   req.payload_len = RSA_size(rsa_pubkey);
 
@@ -1517,6 +1651,18 @@ int main(int argc, char *argv[])
   ssl_disconnect(c0);
 
   c0 = ssl_connect(ctx, port);
+  kssl_op_rsa_decrypt_raw(c0, rsa_pubkey);
+  ssl_disconnect(c0);
+
+  c0 = ssl_connect(ctx, port);
+  kssl_op_rsa_decrypt_raw_bad_data(c0, rsa_pubkey);
+  ssl_disconnect(c0);
+
+  c0 = ssl_connect(ctx, port);
+  kssl_op_rsa_decrypt_raw_bad_digest(c0, rsa_pubkey);
+  ssl_disconnect(c0);
+
+  c0 = ssl_connect(ctx, port);
   kssl_op_rsa_sign(c0, rsa_pubkey, 0);
   ssl_disconnect(c0);
 
@@ -1536,6 +1682,9 @@ int main(int argc, char *argv[])
   kssl_op_rsa_decrypt(c, rsa_pubkey);
   kssl_op_rsa_decrypt_bad_data(c, rsa_pubkey);
   kssl_op_rsa_decrypt_bad_digest(c, rsa_pubkey);
+  kssl_op_rsa_decrypt_raw(c, rsa_pubkey);
+  kssl_op_rsa_decrypt_raw_bad_data(c, rsa_pubkey);
+  kssl_op_rsa_decrypt_raw_bad_digest(c, rsa_pubkey);
   kssl_op_rsa_sign(c, rsa_pubkey, 0);
   kssl_op_ecdsa_sign(c, ecdsa_pubkey, 0);
   ssl_disconnect(c);
@@ -1562,6 +1711,12 @@ int main(int argc, char *argv[])
   kssl_op_rsa_decrypt_bad_data(c2, rsa_pubkey);
   kssl_op_rsa_decrypt_bad_digest(c1, rsa_pubkey);
   kssl_op_rsa_decrypt_bad_digest(c2, rsa_pubkey);
+  kssl_op_rsa_decrypt_raw(c1, rsa_pubkey);
+  kssl_op_rsa_decrypt_raw(c2, rsa_pubkey);
+  kssl_op_rsa_decrypt_raw_bad_data(c1, rsa_pubkey);
+  kssl_op_rsa_decrypt_raw_bad_data(c2, rsa_pubkey);
+  kssl_op_rsa_decrypt_raw_bad_digest(c1, rsa_pubkey);
+  kssl_op_rsa_decrypt_raw_bad_digest(c2, rsa_pubkey);
   kssl_op_rsa_sign(c1, rsa_pubkey, 0);
   kssl_op_rsa_sign(c2, rsa_pubkey, 0);
   kssl_op_ecdsa_sign(c1, ecdsa_pubkey, 0);
@@ -1589,12 +1744,18 @@ int main(int argc, char *argv[])
   kssl_op_ping_bad_version(c2);
   kssl_op_rsa_decrypt(c1, rsa_pubkey);
   kssl_op_rsa_decrypt(c2, rsa_pubkey);
+  kssl_op_rsa_decrypt_raw(c1, rsa_pubkey);
+  kssl_op_rsa_decrypt_raw(c2, rsa_pubkey);
   ssl_disconnect(c1);
   c1 = ssl_connect(ctx, port);
   kssl_op_rsa_decrypt_bad_data(c1, rsa_pubkey);
   kssl_op_rsa_decrypt_bad_data(c2, rsa_pubkey);
   kssl_op_rsa_decrypt_bad_digest(c1, rsa_pubkey);
   kssl_op_rsa_decrypt_bad_digest(c2, rsa_pubkey);
+  kssl_op_rsa_decrypt_raw_bad_data(c1, rsa_pubkey);
+  kssl_op_rsa_decrypt_raw_bad_data(c2, rsa_pubkey);
+  kssl_op_rsa_decrypt_raw_bad_digest(c1, rsa_pubkey);
+  kssl_op_rsa_decrypt_raw_bad_digest(c2, rsa_pubkey);
   kssl_op_rsa_sign(c1, rsa_pubkey, 0);
   kssl_op_rsa_sign(c2, rsa_pubkey, 0);
   kssl_op_ecdsa_sign(c1, ecdsa_pubkey, 0);

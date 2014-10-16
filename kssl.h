@@ -61,8 +61,9 @@ typedef struct {
 #define KSSL_OP_PING 0xF1
 #define KSSL_OP_PONG 0xF2
 
-// Decrypt data encrypted using RSA with RSA_PKCS1_PADDING
-#define KSSL_OP_RSA_DECRYPT 0x01
+// Decrypt data encrypted using RSA with or without RSA_PKCS1_PADDING
+#define KSSL_OP_RSA_DECRYPT          0x01
+#define KSSL_OP_RSA_DECRYPT_RAW      0x08
 
 // Sign data using RSA
 #define KSSL_OP_RSA_SIGN_MD5SHA1     0x02
