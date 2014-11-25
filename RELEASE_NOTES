@@ -1,3 +1,12 @@
+R1.6.1-20141125-1226
+- 2014-11-12 Update the CA cert for compatibility.
+- 2014-11-18 Merge pull request #89 from cloudflare/nick/CA-compat
+- 2014-11-18 Added special keys to be installed for testing.
+- 2014-11-19 Merge pull request #90 from cloudflare/jacob/testing-keys
+- 2014-11-24 Bump OpenSSL to 1.0.1j
+- 2014-11-25 Merge pull request #92 from cloudflare/nick/openssl
+
+
 R1.6.0-20141016-0738
 - 2014-06-26 added dockerfiles for centOS and debian
 - 2014-06-26 added rpm-build to centos image
