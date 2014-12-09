@@ -319,7 +319,7 @@ int do_ssl(connection_state *state)
           return 1;
           
         default:
-          ERR_clear_error();
+          log_ssl_error(ssl, rc);
           return 0;
         }
       }
@@ -579,6 +579,20 @@ void new_connection_cb(uv_stream_t *server, int status)
   // complete here and will be completed in the read_cb/do_ssl above.
 
   SSL_set_accept_state(ssl);
-  SSL_do_handshake(ssl);
+
+  rc = SSL_do_handshake(ssl);
+  if (rc != 1) {
+    switch (SSL_get_error(state->ssl, rc)) {
+    case SSL_ERROR_WANT_READ:
+    case SSL_ERROR_WANT_WRITE:
+      ERR_clear_error();
+      break;
+
+    default:
+      log_ssl_error(ssl, rc);
+      uv_close((uv_handle_t *)client, close_cb);
+      return;
+    }
+  }
 }
 
