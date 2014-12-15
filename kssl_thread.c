@@ -162,19 +162,35 @@ void close_cb(uv_handle_t *tcp)
   }
 }
 
-// connection_terminate: terminate an SSL connection and remove from
-// event loop. Clean up any allocated memory.
-void connection_terminate(uv_tcp_t *tcp)
-{
-  connection_state *state = (connection_state *)tcp->data;
+// try_shutdown: calls SSL_shutdown to see if the SSL connection has been
+// terminated. If it has (or a fatal error occurs) then terminate the
+// underlying TCP connection; otherwise we may be in the WANT_READ or
+// WANT_WRITE state and need to do send/receive on the TCP connection or via
+// the BIO to satisfy OpenSSL.
+void try_shutdown(connection_state *state) {
   SSL *ssl = state->ssl;
 
   int rc = SSL_shutdown(ssl);
-  if (rc == 0) {
-    SSL_shutdown(ssl);
+
+  write_log(1, "SSL_shutdown %p returned %d", state, rc);
+
+  // If rc == 1 or the returned error is NOT WANT_READ/WANT_WRITE then fall
+  // through to the code that cleans up the connection completely.
+
+  if (rc != 1) {
+    switch (SSL_get_error(ssl, rc)) {
+    case SSL_ERROR_WANT_READ:
+    case SSL_ERROR_WANT_WRITE:
+      ERR_clear_error();
+      return;
+
+    default:
+      log_ssl_error(ssl, rc);
+      break;
+    }
   }
 
-  rc = uv_read_stop((uv_stream_t *)tcp);
+  rc = uv_read_stop((uv_stream_t *)state->tcp);
   if (rc != 0) {
     write_log(1, "Failed to stop TCP read: %s", 
               error_string(rc));
@@ -194,7 +210,18 @@ void connection_terminate(uv_tcp_t *tcp)
     state->next->prev = state->prev;
   }
 
-  uv_close((uv_handle_t *)tcp, close_cb);
+  uv_close((uv_handle_t *)state->tcp, close_cb);
+}
+
+// connection_terminate: terminate an SSL connection by marking it as
+// terminated and by calling SSL_shutdown. Until SSL_shutdown returns 1
+// (indicating the connection is terminated) it's necessary to keep
+// the TCP connection alive to send/receive any data at the SSL level.
+void connection_terminate(uv_tcp_t *tcp)
+{
+  connection_state *state = (connection_state *)tcp->data;
+  state->state = CONNECTION_STATE_TERMINATING;
+  try_shutdown(state);
 }
 
 // write_queued_message: write all messages in the queue onto the wire
@@ -319,7 +346,7 @@ int do_ssl(connection_state *state)
           return 1;
           
         default:
-          ERR_clear_error();
+          log_ssl_error(state->ssl, rc);
           return 0;
         }
       }
@@ -467,6 +494,14 @@ void read_cb(uv_stream_t *s, ssize_t nread, const uv_buf_t *buf)
 {
   connection_state *state = (connection_state *)s->data;
 
+  // If the connection is terminating then call try_shutdown to see if the
+  // connection is now actually shutdown.
+
+  if (state->state == CONNECTION_STATE_TERMINATING) {
+    try_shutdown(state);
+    return;
+  }
+
   if (nread > 0) {
 
     // If there's data to read then pass it to OpenSSL via the BIO
@@ -579,6 +614,20 @@ void new_connection_cb(uv_stream_t *server, int status)
   // complete here and will be completed in the read_cb/do_ssl above.
 
   SSL_set_accept_state(ssl);
-  SSL_do_handshake(ssl);
+
+  rc = SSL_do_handshake(ssl);
+  if (rc != 1) {
+    switch (SSL_get_error(state->ssl, rc)) {
+    case SSL_ERROR_WANT_READ:
+    case SSL_ERROR_WANT_WRITE:
+      ERR_clear_error();
+      break;
+
+    default:
+      log_ssl_error(ssl, rc);
+      uv_close((uv_handle_t *)client, close_cb);
+      return;
+    }
+  }
 }
 
