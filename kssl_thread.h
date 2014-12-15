@@ -27,6 +27,10 @@ extern uv_rwlock_t *pk_lock;
 
 #define CONNECTION_STATE_GET_PAYLOAD 0x02
 
+// Waiting for the payload to be received
+
+#define CONNECTION_STATE_TERMINATING 0x03
+
 // The maximum number of items that can be queued to send. This must
 // never be exceeded.
 
