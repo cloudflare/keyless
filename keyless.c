@@ -722,31 +722,20 @@ int main(int argc, char *argv[])
 
   if (help) {
     printf("Usage: %s [OPTIONS]\n", PROGRAM_NAME);
-    fatal_error("    --port\n\
-              (optional) The TCP port on which to listen for connections.\n\
-              There connections must be TLSv1.2. Defaults to 2407.\n\
-\n\
-     --ip     \n\
-              (optional) The IP address of the interface to bind to.\n\
-              If missing binds to all available interfaces.\n\
-    \n\
-     --ca-file\n\
-\n\
-              Path to a PEM-encoded file containing the CA certificate\n\
-              used to sign client certificates presented on connection.\n\
-\n\
-    --server-cert\n\
-    --server-key\n\
+    fatal_error("\n\
+REQUIRED\n\
+     --server-cert\n\
+     --server-key\n\
 \n\
               Path to PEM-encoded files containing the certificate and\n\
               private key that are used when a connection is made to the\n\
               server. These must be signed by an authority that the client\n\
               side recognizes (e.g. the same CA as --ca-file).\n\
 \n\
-    --cipher-list\n\
+     --ca-file\n\
 \n\
-              An OpenSSL list of ciphers that the TLS server will accept\n\
-              for connections. e.g. ECDHE-RSA-AES128-SHA256:RC4:HIGH:!MD5\n\
+              Path to a PEM-encoded file containing the CA certificate\n\
+              used to sign client certificates presented on connection.\n\
 \n\
     --private-key-directory\n\
 \n\
@@ -755,52 +744,69 @@ int main(int argc, char *argv[])
               \".key\" and be PEM-encoded. There should be no trailing / on \n\
               the path.\n\
 \n\
+OPTIONAL\n\
+     --ip     \n\
+              The IP address of the interface to bind to.\n\
+              If missing binds to all available interfaces.\n\
+\n\
+     --port\n\
+              The TCP port on which to listen for connections.\n\
+              There connections must be TLSv1.2. Defaults to 2407.\n\
+\n\
+    --cipher-list\n\
+\n\
+              An OpenSSL list of ciphers that the TLS server will accept\n\
+              for connections. e.g. ECDHE-RSA-AES128-SHA256:RC4:HIGH:!MD5\n\
+\n\
+\n\
     --silent\n\
               Prevents keyserver from producing any log output. Fatal\n\
               start up errors are sent to stderr.\n\
 \n\
-    --verbose \n\
+    --verbose\n\
 \n\
               Enables verbose logging. When enabled access log data is\n\
               sent to the logger as well as errors.\n\
 \n\
     --num-workers\n\
 \n\
-              (optional) The number of worker threads to start. Each worker\n\
-              thread will handle a single connection from a KSSL client. \n\
+              The number of worker threads to start. Each worker thread\n\
+              will handle a single connection from a KSSL client. \n\
               Defaults to 1.\n\
 \n\
     --pid-file\n\
 \n\
-              (optional) Path to a file into which the PID of the keyserver.\n\
+              Path to a file into which the PID of the keyserver.\n\
               This file is only written if the keyserver starts successfully.\n\
 \n\
     --test\n\
-              (optional) Run through start up and check all parameters\n\
-              for validity. Returns 0 if configuration is good.\n\
+              Run through start up and check all parameters for validity.\n\
+              Returns 0 if configuration is good.\n\
 \n\
 \n\
 The following options are not available on Windows systems:\n\
 \n\
     --user\n\
 \n\
-            (optional) user:group to switch to. Can be in the form user:group\n\
-            or just user (in which case user:user is implied) (root only)\n\
+            user:group to switch to. Can be in the form user:group or just\n\
+            user (in which case user:user is implied) (root only)\n\
 \n\
     --daemon\n\
 \n\
-            (optional) Forks and abandons the parent process.\n\
+            Forks and abandons the parent process.\n\
 \n\
     --syslog\n\
 \n\
-            (optional) Log lines are sent to syslog (instead of stdout\n\
-            or stderr). \n");
+            Log lines are sent to syslog (instead of stdout or stderr).\n");
   }
   if (!server_cert) {
     fatal_error("The --server-cert parameter must be specified with the path to the server's SSL certificate");
   }
   if (!server_key) {
     fatal_error("The --server-key parameter must be specified with the path to the server's SSL private key");
+  }
+  if (!ca_file) {
+    fatal_error("The --ca-file parameter must be specified with the path to the CA certificate used to sign client certificates presented on connection");
   }
   if (!private_key_directory) {
     fatal_error("The --private-key-directory parameter must be specified with the path to directory containing private keys");
