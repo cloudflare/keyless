@@ -172,8 +172,6 @@ void try_shutdown(connection_state *state) {
 
   int rc = SSL_shutdown(ssl);
 
-  write_log(1, "SSL_shutdown %p returned %d", state, rc);
-
   // If rc == 1 or the returned error is NOT WANT_READ/WANT_WRITE then fall
   // through to the code that cleans up the connection completely.
 
