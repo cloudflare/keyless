@@ -28,7 +28,7 @@ LIBUV_LOG := $(TMP)libuv.log
 
 # This is the version of OpenSSL to link against.
 
-OPENSSL_VERSION := 1.0.1j
+OPENSSL_VERSION := 1.0.1k
 
 OPENSSL_ROOT := $(TMP)openssl-$(OPENSSL_VERSION)
 
@@ -50,7 +50,7 @@ CFLAGS += -DKSSL_VERSION=\"$(VERSION)-$(REVISION)\"
 #
 # Note that -ldl must appear after OPENSSL_A otherwise the link will fail
 
-LDLIBS += -L. $(OPENSSL_A) $(LIBUV_A) -ldl -lpthread 
+LDLIBS += -L. $(OPENSSL_A) $(LIBUV_A) -ldl -lpthread
 
 ifeq ($(OS),Linux)
 LDLIBS += -lrt
