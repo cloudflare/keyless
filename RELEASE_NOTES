@@ -1,3 +1,17 @@
+2015.2.0
+- 2014-12-09 KEY-56 - Checkout do_ssl_handshake error and close if fatal
+- 2014-12-15 Handle SSL_shutdown returning WANT_READ / WANT_WRITE
+- 2014-12-15 Merge pull request #93 from jgrahamc/master
+- 2014-12-16 Remove useless logging statement
+- 2014-12-16 Merge pull request #95 from jgrahamc/master
+- 2014-12-16 Re-ordered usage information such that required options are called out and at the top.
+- 2014-12-16 Merge pull request #96 from buro9/master
+- 2015-01-13 updated openssl_version to 1.0.1k
+- 2015-01-13 Merge pull request #97 from cloudflare/update-openssl
+- 2015-02-18 Update to use the one 5-year CA
+- 2015-02-19 Merge pull request #98 from cloudflare/nick/5yearca
+- 2015-02-19 updated makefile to use cfsetupv2 release tags
+
 R1.6.1-20141125-1226
 - 2014-11-12 Update the CA cert for compatibility.
 - 2014-11-18 Merge pull request #89 from cloudflare/nick/CA-compat
