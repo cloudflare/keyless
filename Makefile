@@ -10,7 +10,7 @@ NAME := keyless
 GMSL_DIR := gmsl/
 include $(GMSL_DIR)/gmsl
 
-include Version
+VERSION := $(shell git describe --tags --always --dirty=-dev)
 
 TMP := tmp/
 
@@ -43,7 +43,7 @@ OPENSSL_LOG := $(TMP)openssl.log
 
 CFLAGS += -g -Wall -Wextra -Wno-unused-parameter -Werror
 CFLAGS += -I. -I$(LIBUV_INCLUDE) -I$(OPENSSL_INCLUDE)
-CFLAGS += -DKSSL_VERSION=\"$(VERSION)-$(REVISION)\"
+CFLAGS += -DKSSL_VERSION=\"$(VERSION)\"
 
 # Link against OpenSSL and libuv. libuv is built and linked against
 # statically.
@@ -144,8 +144,8 @@ DESCRIPTION="A reference implementation for CloudFlare's Keyless SSL server"
 DISTRO := debian
 ARCH := x86_64
 
-DEB_PACKAGE := $(NAME)_$(VERSION)-$(ITERATION)_$(ARCH).deb
-RPM_PACKAGE := $(NAME)-$(VERSION)_$(ITERATION).$(ARCH).rpm
+DEB_PACKAGE := $(NAME)_$(VERSION)_$(ARCH).deb
+RPM_PACKAGE := $(NAME)-$(VERSION).$(ARCH).rpm
 
 # Include distro-specific settings
 
@@ -161,7 +161,6 @@ FPM = fpm -C $(DESTDIR) \
 	--description $(DESCRIPTION) \
 	--vendor $(VENDOR) \
 	--license $(LICENSE) \
-	--iteration $(ITERATION) \
 	--before-install pkg/$(DISTRO)/before-install.sh \
 	--before-remove  pkg/$(DISTRO)/before-remove.sh \
 	--after-install  pkg/$(DISTRO)/after-install.sh \
@@ -293,5 +292,3 @@ $(OBJ)%.o: %.c ; @$(COMPILE.c) $(OUTPUT_OPTION) $<
 
 $(OBJ)$(NAME).o: kssl.h
 $(OBJ)testclient.o: kssl.h
-
-include Release
