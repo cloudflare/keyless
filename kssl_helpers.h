@@ -17,12 +17,15 @@
 // Helper macros for known sizes of V1 items
 #define KSSL_OPCODE_ITEM_SIZE (KSSL_ITEM_HEADER_SIZE + 1)
 #define KSSL_ERROR_ITEM_SIZE (KSSL_ITEM_HEADER_SIZE + 1)
+#define KSSL_SKI_SIZE 20
 #define KSSL_DIGEST_SIZE 32
 
 // Structure containing request information parsed from payload
 typedef struct kssl_operation_ {
   int is_opcode_set;
   BYTE opcode;
+  int is_ski_set;
+  BYTE *ski;
   int is_digest_set;
   BYTE *digest;
   int is_payload_set;

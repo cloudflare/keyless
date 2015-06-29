@@ -36,12 +36,13 @@ kssl_error_code add_key_from_buffer(
   int         key_len,  // Length of key in bytes
   pk_list     list);    // Array of private keys 
 
-// find_private_key: returns an id for the key that matches the digest.
+// find_private_key: returns an id for the key that matches the ski.
 // In this implementation key id is the index into the list of privates.
 // A negative return indicates an error.
 int find_private_key(
-  pk_list     list,     // Array of private keys from new_pk_list
-  BYTE       *digest);  // Digest of key to search for (see digest_public_key)
+  pk_list     list,         // Array of private keys from new_pk_list
+  BYTE       *ski,          // SKI of key searched for (see get_ski)
+  BYTE       *digest);      // Digest of key searched for (see digest_public_key)
 
 // private_key_operation: perform a private key operation
 kssl_error_code private_key_operation(

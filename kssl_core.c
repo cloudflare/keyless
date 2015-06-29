@@ -92,13 +92,15 @@ kssl_error_code kssl_operate(kssl_header *header,
       int max_payload_size;
       int key_id;
 
-      if (request.is_digest_set == 0) {
+      if (request.is_ski_set) {
+        // Identify private key from request ski
+        key_id = find_private_key(privates, request.ski, NULL);
+      } else if (request.is_digest_set) {
+        key_id = find_private_key(privates, NULL, request.digest);
+      } else {
         err = KSSL_ERROR_FORMAT;
         break;
       }
-
-      // Identify private key from request digest
-      key_id = find_private_key(privates, request.digest);
       if (key_id < 0) {
         err = KSSL_ERROR_KEY_NOT_FOUND;
         break;
