@@ -38,6 +38,7 @@ typedef struct {
                                  // digest_public_key)
 #define KSSL_TAG_SNI        0x02 // Server name (optional)
 #define KSSL_TAG_CLIENT_IP  0x03 // Client IP (4 bytes for IPv4, 16 for IPv6)
+#define KSSL_TAG_SKI        0x04 // Public key SKI
 #define KSSL_TAG_OPCODE     0x11 // Requested operation (one of KSSL_OP_*)
 #define KSSL_TAG_PAYLOAD    0x12 // Payload
 

@@ -6,23 +6,24 @@
 #include <openssl/ssl.h>
 #include <openssl/err.h>
 #include <openssl/conf.h>
-#include <openssl/engine.h>
 #include <openssl/evp.h>
 #include <openssl/ec.h>
+#include <openssl/x509.h>
+#include <openssl/sha.h>
 
 #include "kssl.h"
 #include "kssl_helpers.h"
 #include "kssl_log.h"
-
 #include "kssl_private_key.h"
 #include "kssl_core.h"
 
 extern int silent;
 
-// private_key is an EVP key with its associate SHA256 digest
+// private_key is an EVP key with its associate SHA256 ski
 typedef struct {
+  BYTE ski[KSSL_SKI_SIZE];         // SKI of public key.
   BYTE digest[KSSL_DIGEST_SIZE];   // SHA256 digest of key.
-  EVP_PKEY *key;                        // EVP private key
+  EVP_PKEY *key;                   // EVP private key
 } private_key;
 
 // pk_list_ is an array of private_key structures
@@ -64,6 +65,21 @@ static int opcode_to_digest_nid(BYTE opcode) {
       return NID_sha512;
   }
 
+  return 0;
+}
+
+// get_ski: calculates the Subject Key Identifier of a given public key.
+// SKI must be initialized with at least 20 bytes of space and is used to
+// return a SHA-1 ski.
+static int get_ski(EVP_PKEY *key, BYTE *ski) {
+  X509_PUBKEY *xpk;
+  if(!X509_PUBKEY_set(&xpk, key) ||
+     !xpk ||
+     !xpk->public_key ||
+     !xpk->public_key->data) {
+    return 1;
+  }
+  SHA1(xpk->public_key->data, xpk->public_key->length, ski);
   return 0;
 }
 
@@ -158,7 +174,13 @@ static kssl_error_code add_key_from_bio(BIO *key_bp,     // BIO Key value in PEM
       return KSSL_ERROR_INTERNAL;
     }
   }
+
   list->privates[list->current].key = local_key;
+
+  if(get_ski(local_key, list->privates[list->current].ski) != 0) {
+    return KSSL_ERROR_INTERNAL;
+  }
+
   if(digest_public_key(local_key, list->privates[list->current].digest) != 0) {
     return KSSL_ERROR_INTERNAL;
   }
@@ -273,17 +295,27 @@ kssl_error_code add_key_from_buffer(const char *key, // Key value in PEM format
   return KSSL_ERROR_NONE;
 }
 
-// find_private_key: returns an id for the key that matches the digest.
+// find_private_key: returns an id for the key that matches the ski.
 // In this implementation key id is the index into the list of privates.
 // A negative return indicates an error.
 int find_private_key(pk_list list,   // Array of private keys from new_pk_list
+                     BYTE *ski,      // SKI of key searched for (see get_ski)
                      BYTE *digest) { // Digest of key searched for (see digest_public_key)
   int j;
   int found = 0;
   for (j = 0; j < list->current; j++) {
-    if (constant_time_eq(list->privates[j].digest, digest, KSSL_DIGEST_SIZE) == 1) {
-      found = 1;
-      break;
+    if (ski) {
+      if (constant_time_eq(list->privates[j].ski, ski, KSSL_SKI_SIZE) == 1) {
+        found = 1;
+        break;
+      }
+    }
+
+    if (digest) {
+      if (constant_time_eq(list->privates[j].digest, digest, KSSL_DIGEST_SIZE) == 1) {
+        found = 1;
+        break;
+      }
     }
   }
 

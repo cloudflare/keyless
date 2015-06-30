@@ -267,6 +267,9 @@ kssl_error_code flatten_operation(kssl_header *header,
   if (operation->is_payload_set) {
     local_req_len += KSSL_ITEM_HEADER_SIZE + operation->payload_len;
   }
+  if (operation->is_ski_set) {
+    local_req_len += KSSL_ITEM_HEADER_SIZE + KSSL_SKI_SIZE;
+  }
   if (operation->is_digest_set) {
     local_req_len += KSSL_ITEM_HEADER_SIZE + KSSL_DIGEST_SIZE;
   }
@@ -304,6 +307,10 @@ kssl_error_code flatten_operation(kssl_header *header,
     flatten_item(KSSL_TAG_PAYLOAD, operation->payload, operation->payload_len,
         local_req, &offset);
   }
+  if (operation->is_ski_set) {
+    flatten_item(KSSL_TAG_SKI, operation->ski, KSSL_SKI_SIZE,
+        local_req, &offset);
+  }
   if (operation->is_digest_set) {
     flatten_item(KSSL_TAG_DIGEST, operation->digest, KSSL_DIGEST_SIZE,
         local_req, &offset);
@@ -326,6 +333,8 @@ void zero_operation(kssl_operation *operation) {
   if (operation != NULL) {
     operation->is_opcode_set = 0;
     operation->opcode = 0;
+    operation->is_ski_set = 0;
+    operation->ski = NULL;
     operation->is_digest_set = 0;
     operation->digest = NULL;
     operation->is_payload_set = 0;
@@ -372,6 +381,14 @@ kssl_error_code parse_message_payload(BYTE *payload,               //
 
         operation->opcode = temp_item.data[0];
         operation->is_opcode_set = 1;
+        break;
+      }
+      case KSSL_TAG_SKI:
+      {
+        // Skip over malformed tags
+        if (temp_item.length != KSSL_SKI_SIZE) continue;
+        operation->ski = temp_item.data;
+        operation->is_ski_set = 1;
         break;
       }
       case KSSL_TAG_DIGEST:
