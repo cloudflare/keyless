@@ -9,7 +9,6 @@
 #include <openssl/evp.h>
 #include <openssl/ec.h>
 #include <openssl/x509.h>
-#include <openssl/sha.h>
 
 #include "kssl.h"
 #include "kssl_helpers.h"
@@ -72,14 +71,15 @@ static int opcode_to_digest_nid(BYTE opcode) {
 // SKI must be initialized with at least 20 bytes of space and is used to
 // return a SHA-1 ski.
 static int get_ski(EVP_PKEY *key, BYTE *ski) {
-  X509_PUBKEY *xpk;
-  if(!X509_PUBKEY_set(&xpk, key) ||
-     !xpk ||
-     !xpk->public_key ||
-     !xpk->public_key->data) {
+  X509_PUBKEY *xpk = NULL;
+
+  if(!X509_PUBKEY_set(&xpk, key)) {
     return 1;
   }
+
   SHA1(xpk->public_key->data, xpk->public_key->length, ski);
+
+  X509_PUBKEY_free(xpk);
   return 0;
 }
 
