@@ -28,7 +28,7 @@ LIBUV_LOG := $(TMP)libuv.log
 
 # This is the version of OpenSSL to link against.
 
-OPENSSL_VERSION := 1.0.2d
+OPENSSL_VERSION := 1.0.2e
 
 OPENSSL_ROOT := $(TMP)openssl-$(OPENSSL_VERSION)
 
