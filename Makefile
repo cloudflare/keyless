@@ -28,7 +28,7 @@ LIBUV_LOG := $(TMP)libuv.log
 
 # This is the version of OpenSSL to link against.
 
-OPENSSL_VERSION := 1.0.2e
+OPENSSL_VERSION := 1.0.2f
 
 OPENSSL_ROOT := $(TMP)openssl-$(OPENSSL_VERSION)
 
@@ -84,7 +84,7 @@ $(LIBUV_A): $(call marker,$(TMP)) $(LIBUV_DIR)
 
 $(LIBUV_DIR): $(call marker,$(TMP))
 	@rm -rf $(LIBUV_ROOT)
-	@wget -qO $(TMP)$(LIBUV_SHA).zip http://github.com/joyent/libuv/archive/$(LIBUV_SHA).zip
+	@wget -qO $(TMP)$(LIBUV_SHA).zip http://github.com/libuv/libuv/archive/$(LIBUV_SHA).zip
 	@unzip -d $(TMP) $(TMP)$(LIBUV_SHA).zip
 	@touch $@
 
