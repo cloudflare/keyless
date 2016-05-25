@@ -19,7 +19,7 @@ OS := $(shell uname -s)
 # This is the SHA of the commit on Github of the libuv project that we will
 # build against.
 
-LIBUV_SHA := 1daff47ae9df55902f07d3c5b8a3a393306a2f1e
+LIBUV_SHA := d989902ac658b4323a4f4020446e6f4dc449e25c
 
 LIBUV_ROOT := $(TMP)libuv-$(LIBUV_SHA)
 LIBUV_A := $(LIBUV_ROOT)/.libs/libuv.a
@@ -28,7 +28,7 @@ LIBUV_LOG := $(TMP)libuv.log
 
 # This is the version of OpenSSL to link against.
 
-OPENSSL_VERSION := 1.0.2f
+OPENSSL_VERSION := 1.0.2h
 
 OPENSSL_ROOT := $(TMP)openssl-$(OPENSSL_VERSION)
 
