@@ -104,7 +104,7 @@ $(firstword $(OPENSSL_A)): $(OPENSSL_DIR)
 
 $(OPENSSL_DIR): $(call marker,$(TMP))
 	@rm -rf $(OPENSSL_ROOT)
-	@wget -qO $(TMP)openssl-$(OPENSSL_VERSION).tar.gz ftp://ftp.openssl.org/source/openssl-$(OPENSSL_VERSION).tar.gz
+	@wget -qO $(TMP)openssl-$(OPENSSL_VERSION).tar.gz ftp://ftp.openssl.org/source/old/1.0.2/openssl-$(OPENSSL_VERSION).tar.gz
 	@tar -C $(TMP) -z -x -v -f $(TMP)openssl-$(OPENSSL_VERSION).tar.gz
 	@touch $@
 
