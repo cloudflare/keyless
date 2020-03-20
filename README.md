@@ -1,3 +1,7 @@
+Deprecated
+==========
+This repository is deprecated, please visit https://github.com/cloudflare/gokeyless for Cloudflare Keyless SSL
+
 CloudFlare Keyless SSL
 ==========================================================
 
